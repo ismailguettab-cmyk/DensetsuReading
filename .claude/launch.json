@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "densetsu",
+      "runtimeExecutable": "C:\\Users\\IsmailGUETTAB\\AppData\\Local\\Programs\\node\\node.exe",
+      "runtimeArgs": ["tool/dev_server.mjs"],
+      "port": 5173
+    }
+  ]
+}

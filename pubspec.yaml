@@ -1,0 +1,27 @@
+name: densetsu_reading
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  google_fonts: 8.0.0
+  html: ^0.15.7
+  http: ^1.6.0
+  shared_preferences: ^2.5.6
+  url_launcher: ^6.3.3
+  web: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
