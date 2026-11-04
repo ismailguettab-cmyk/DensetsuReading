@@ -56,9 +56,12 @@ class Chapter {
 }
 
 class PageImage {
-  const PageImage(this.url, [this.headers = const {}]);
+  const PageImage(this.url, [this.headers = const {}, this.fallback]);
   final String url;
   final Map<String, String> headers;
+
+  /// Second address to try when the first one fails (e.g. MangaDex origin server).
+  final String? fallback;
 }
 
 class MangaList {

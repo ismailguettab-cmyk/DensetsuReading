@@ -6,6 +6,7 @@ import '../core/motion.dart';
 import '../core/net.dart';
 import '../core/theme.dart';
 import '../sources/source.dart';
+import 'sakura.dart';
 
 /// Cover art that fades in once decoded, with a quiet placeholder meanwhile.
 class CoverImage extends StatelessWidget {
@@ -423,6 +424,13 @@ class SoftRoute<T> extends PageRouteBuilder<T> {
             );
           },
         );
+
+  @override
+  TickerFuture didPush() {
+    final overlay = navigator?.overlay;
+    if (overlay != null) SakuraBurst.play(overlay);
+    return super.didPush();
+  }
 }
 
 void toast(BuildContext context, String message) {

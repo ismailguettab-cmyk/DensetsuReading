@@ -70,6 +70,7 @@ class _MangaPageState extends State<MangaPage> {
     }
     final aniId = widget.ani?.id ?? widget.resume?.anilistId;
     if (aniId != null) _loadAni(aniId, summary: true);
+    if (widget.ani == null) _probeAll();
     _loadSource();
   }
 
@@ -77,13 +78,14 @@ class _MangaPageState extends State<MangaPage> {
     try {
       final media = await Services.i.session.api.media(id);
       if (!mounted) return;
+      final first = _ani == null || _probes.isEmpty;
       setState(() => _ani = media);
+      if (first) _probeAll();
       if (!summary) return;
       _summaryEn ??= media.description;
       final fr = await MangaDex.descriptionFor(id, media.searchTitles, 'fr').catchError((_) => null);
       if (!mounted) return;
       setState(() => _summaryFr ??= (fr?.isNotEmpty ?? false) ? fr : null);
-      _autoTranslate();
     } catch (_) {
       // The page still works from the source alone.
     }
@@ -122,7 +124,10 @@ class _MangaPageState extends State<MangaPage> {
       var match = forced;
       final seed = widget.seed;
       if (match == null && seed != null && seed.sourceId == source.id) match = seed;
-      if (match == null && _ani != null) match = await _findInSource(source, _ani!);
+      if (match == null && _ani != null) {
+        match = await _find(source);
+        if (match == null) _candidates = (await source.search(_ani!.searchTitles.first, 1, const {})).items;
+      }
       if (generation != _generation) return;
       if (match == null) {
         setState(() {
@@ -173,7 +178,6 @@ class _MangaPageState extends State<MangaPage> {
       }
     }
     setState(() {});
-    _autoTranslate();
   }
 
   Future<void> _guessAni(SourceManga m) async {
@@ -194,17 +198,43 @@ class _MangaPageState extends State<MangaPage> {
     } catch (_) {}
   }
 
-  Future<SourceManga?> _findInSource(MangaSource source, AniMedia ani) async {
+  /// Which installed sources carry this manga: null = still checking, else the match (or a miss).
+  final _availability = <String, SourceManga?>{};
+  final _checked = <String>{};
+  final _probes = <String, Future<SourceManga?>>{};
+
+  List<String> get _titles => _ani?.searchTitles ?? [if (widget.seed != null) widget.seed!.title];
+
+  /// Looks the manga up in every installed source at once, to mark which ones have it.
+  void _probeAll() {
+    for (final s in Services.i.sources.installed) {
+      if (widget.seed != null && widget.seed!.sourceId == s.id) {
+        _availability[s.id] = widget.seed;
+        _checked.add(s.id);
+        continue;
+      }
+      _find(s).then((m) {
+        if (mounted) setState(() => _checked.add(s.id));
+      });
+    }
+  }
+
+  Future<SourceManga?> _find(MangaSource source) => _probes[source.id] ??= _findInSource(source, _titles, aniId: _ani?.id)
+      .then<SourceManga?>((m) => _availability[source.id] = m)
+      .catchError((Object _) => _availability[source.id] = null);
+
+  Future<SourceManga?> _findInSource(MangaSource source, List<String> titles, {int? aniId}) async {
+    if (titles.isEmpty) return null;
     final candidates = <String, SourceManga>{};
     SourceManga? best;
     var bestScore = 0.0;
-    for (final title in ani.searchTitles.take(3)) {
+    for (final title in titles.take(3)) {
       final page = await source.search(title, 1, const {});
       for (final m in page.items) {
         candidates[m.url] = m;
-        if (m.anilistId == ani.id) return m;
+        if (aniId != null && m.anilistId == aniId) return m;
         for (final t in [m.title, ...m.altTitles]) {
-          for (final at in ani.searchTitles) {
+          for (final at in titles) {
             final s = titleSimilarity(t, at);
             if (s > bestScore) {
               bestScore = s;
@@ -519,6 +549,8 @@ class _MangaPageState extends State<MangaPage> {
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 SourceLogo(s, size: 28),
+                const SizedBox(width: 8),
+                _AvailabilityDot(checked: _checked.contains(s.id), found: _availability[s.id] != null),
                 const SizedBox(width: 10),
                 Text(s.name, style: Txt.label(context)),
                 const SizedBox(width: 6),
@@ -765,6 +797,35 @@ class _MatchSheetState extends State<_MatchSheet> {
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// Small marker on a source chip: spinner while checking, green dot if the manga is there, grey cross if not.
+class _AvailabilityDot extends StatelessWidget {
+  const _AvailabilityDot({required this.checked, required this.found});
+  final bool checked, found;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return AnimatedSwitcher(
+      duration: Motion.fast,
+      transitionBuilder: (child, a) => ScaleTransition(scale: a, child: FadeTransition(opacity: a, child: child)),
+      child: !checked
+          ? SizedBox(key: const ValueKey('wait'), width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.4, color: p.text3))
+          : found
+              ? Container(
+                  key: const ValueKey('yes'),
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3FD18B),
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: const Color(0xFF3FD18B).withValues(alpha: 0.5), blurRadius: 6)],
+                  ),
+                )
+              : Icon(Icons.close_rounded, key: const ValueKey('no'), size: 12, color: p.text3),
     );
   }
 }

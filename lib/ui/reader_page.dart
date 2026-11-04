@@ -73,6 +73,7 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _translate = false;
   final _translations = <String, List<Bubble>>{};
   final _translating = <String>{};
+  final _failed = <String>{};
 
   bool? _lastDouble;
   int _loadToken = 0;
@@ -140,7 +141,17 @@ class _ReaderPageState extends State<ReaderPage> {
     }
   }
 
-  ImageProvider _provider(PageImage p) => NetworkImage(Net.image(p.url, p.headers), headers: Net.nativeHeaders(p.url, p.headers));
+  final _retries = <int, int>{};
+
+  /// Each failed attempt switches to the fallback address (if any) and busts the image cache.
+  ImageProvider _provider(int i) {
+    final p = _pages[i];
+    final attempt = _retries[i] ?? 0;
+    final url = attempt > 0 && p.fallback != null ? p.fallback! : p.url;
+    final address = Net.image(url, p.headers);
+    final key = attempt == 0 ? address : '$address${address.contains('?') ? '&' : '?'}retry=$attempt';
+    return NetworkImage(key, headers: Net.nativeHeaders(url, p.headers));
+  }
 
   /// Learns every page's proportions (and preloads it). Wide pages are spreads,
   /// so they are shown alone in double-page mode.
@@ -155,7 +166,7 @@ class _ReaderPageState extends State<ReaderPage> {
         if (token != _loadToken || !mounted) return;
         final i = order.removeAt(0);
         final completer = Completer<void>();
-        final stream = _provider(_pages[i]).resolve(ImageConfiguration.empty);
+        final stream = _provider(i).resolve(ImageConfiguration.empty);
         late ImageStreamListener listener;
         listener = ImageStreamListener((info, _) {
           final aspect = info.image.width / info.image.height;
@@ -371,7 +382,10 @@ class _ReaderPageState extends State<ReaderPage> {
       toast(context, context.t('reader.noKey'));
       return;
     }
-    setState(() => _translate = !_translate);
+    setState(() {
+      _translate = !_translate;
+      _failed.clear();
+    });
     if (_translate) _translateAround();
   }
 
@@ -390,7 +404,7 @@ class _ReaderPageState extends State<ReaderPage> {
     }
     for (final i in targets) {
       final page = _pages[i];
-      if (_translations.containsKey(page.url) || _translating.contains(page.url)) continue;
+      if (_translations.containsKey(page.url) || _translating.contains(page.url) || _failed.contains(page.url)) continue;
       setState(() => _translating.add(page.url));
       Services.i.translator.page(page).then((bubbles) {
         if (!mounted) return;
@@ -400,8 +414,10 @@ class _ReaderPageState extends State<ReaderPage> {
         });
       }).catchError((Object e) {
         if (!mounted) return;
-        setState(() => _translating.remove(page.url));
-        toast(context, '${context.t('reader.translate')} : $e');
+        setState(() {
+          _translating.remove(page.url);
+          _failed.add(page.url);
+        });
       });
     }
   }
@@ -532,14 +548,33 @@ class _ReaderPageState extends State<ReaderPage> {
     final bubbles = _translate ? _translations[page.url] : null;
     return Stack(fit: StackFit.expand, children: [
       Image(
-        image: _provider(page),
+        image: _provider(i),
         fit: BoxFit.fill, // the box already has the page's exact proportions
         gaplessPlayback: true,
         filterQuality: FilterQuality.medium,
         frameBuilder: (context, child, frame, sync) => sync || frame != null
             ? child
             : Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: context.pal.text3))),
-        errorBuilder: (context, _, __) => Center(child: Icon(Icons.broken_image_rounded, color: context.pal.text3)),
+        errorBuilder: (context, _, _) {
+          final attempt = _retries[i] ?? 0;
+          if (attempt < 2) {
+            // Retry by itself (fallback address first), a moment later.
+            Future.delayed(Duration(milliseconds: 600 + 900 * attempt), () {
+              if (mounted && (_retries[i] ?? 0) == attempt) setState(() => _retries[i] = attempt + 1);
+            });
+            return Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: context.pal.text3)));
+          }
+          return Center(
+            child: Pressable(
+              onTap: () => setState(() => _retries[i] = 1),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.refresh_rounded, color: context.pal.text2, size: 28),
+                const SizedBox(height: 6),
+                Text(context.isEn ? 'Reload page' : 'Recharger la page', style: Txt.caption(context).copyWith(color: context.pal.text2)),
+              ]),
+            ),
+          );
+        },
       ),
       if (bubbles != null)
         AnimatedOpacity(opacity: 1, duration: Motion.base, child: TranslationOverlay(bubbles: bubbles)),
@@ -555,6 +590,26 @@ class _ReaderPageState extends State<ReaderPage> {
               const SizedBox(width: 7),
               Text(context.t('reader.translating'), style: Txt.caption(context).copyWith(color: context.pal.text)),
             ]),
+          ),
+        ),
+      if (_translate && _failed.contains(page.url))
+        Positioned(
+          right: 10,
+          top: 10,
+          child: Pressable(
+            onTap: () {
+              setState(() => _failed.remove(page.url));
+              _translateAround();
+            },
+            child: Glass(
+              radius: 99,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.refresh_rounded, size: 14, color: context.pal.cta),
+                const SizedBox(width: 6),
+                Text(context.isEn ? 'Not translated · retry' : 'Non traduite · réessayer', style: Txt.caption(context).copyWith(color: context.pal.text)),
+              ]),
+            ),
           ),
         ),
     ]);

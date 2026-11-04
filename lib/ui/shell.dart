@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/l10n.dart';
@@ -28,8 +29,9 @@ const _tabs = [
 
 /// Lets a page switch tabs (e.g. "go install a source").
 class ShellScope extends InheritedWidget {
-  const ShellScope({super.key, required this.select, required super.child});
+  const ShellScope({super.key, required this.select, required this.current, required super.child});
   final ValueChanged<int> select;
+  final ValueListenable<int> current;
 
   static ShellScope of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<ShellScope>()!;
 
@@ -48,6 +50,7 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _index = 0;
+  final _current = ValueNotifier(0);
   final _visited = <int>{0};
   final _navigators = List.generate(_tabs.length, (_) => GlobalKey<NavigatorState>());
 
@@ -59,6 +62,7 @@ class _ShellState extends State<Shell> {
     }
     setState(() {
       _index = i;
+      _current.value = i;
       _visited.add(i);
     });
     if (i == 1) Services.i.reco.onVisit();
@@ -99,6 +103,7 @@ class _ShellState extends State<Shell> {
     ]);
 
     return ShellScope(
+      current: _current,
       select: _select,
       child: PopScope(
         canPop: false,

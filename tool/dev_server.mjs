@@ -42,8 +42,17 @@ async function proxy(url, req, res) {
   };
   const referer = url.searchParams.get('referer');
   if (referer) headers.referer = referer;
+  // Madara sites load chapter lists with a POST: forward the method and body.
+  const init = { headers, redirect: 'follow', method: req.method };
+  if (req.method === 'POST') {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    init.body = Buffer.concat(chunks);
+    headers['content-type'] = req.headers['content-type'] || 'application/x-www-form-urlencoded';
+    headers['x-requested-with'] = 'XMLHttpRequest';
+  }
   try {
-    const upstream = await fetch(target, { headers, redirect: 'follow' });
+    const upstream = await fetch(target, init);
     const body = Buffer.from(await upstream.arrayBuffer());
     res.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/octet-stream',

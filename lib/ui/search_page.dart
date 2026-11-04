@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/l10n.dart';
@@ -15,8 +16,36 @@ import 'sources_page.dart';
 import 'widgets.dart';
 
 /// Step 1: pick a source (or install one). Step 2: search inside it.
-class SearchPage extends StatelessWidget {
+/// The source cards open like book covers each time the tab is shown.
+class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
+
+  @override
+  State<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends State<SearchPage> {
+  ValueListenable<int>? _tab;
+  int _replay = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tab = ShellScope.of(context).current;
+    if (tab == _tab) return;
+    _tab?.removeListener(_onTab);
+    _tab = tab..addListener(_onTab);
+  }
+
+  void _onTab() {
+    if (_tab?.value == 2 && mounted) setState(() => _replay++);
+  }
+
+  @override
+  void dispose() {
+    _tab?.removeListener(_onTab);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +71,7 @@ class SearchPage extends StatelessWidget {
             const SizedBox(height: 8),
             Text(context.t('search.pick'), style: Txt.body(context)),
             const SizedBox(height: 28),
-            _SourceGrid(sources: installed),
+            _SourceGrid(sources: installed, replay: _replay),
           ]);
         },
       ),
@@ -51,9 +80,10 @@ class SearchPage extends StatelessWidget {
 }
 
 class _SourceGrid extends StatelessWidget {
-  const _SourceGrid({required this.sources, this.install = false});
+  const _SourceGrid({required this.sources, this.install = false, this.replay = 0});
   final List<MangaSource> sources;
   final bool install;
+  final int replay;
 
   @override
   Widget build(BuildContext context) {
@@ -65,22 +95,23 @@ class _SourceGrid extends StatelessWidget {
         for (var i = 0; i < sources.length; i++)
           SizedBox(
             width: install ? (box.maxWidth >= 700 ? (box.maxWidth - gap) / 2 : box.maxWidth) : w,
-            child: Reveal(
-              index: i,
-              child: install
-                  ? SourceTile(source: sources[i])
-                  : _SourceCard(
+            child: install
+                ? Reveal(index: i, child: SourceTile(source: sources[i]))
+                : BookUnfold(
+                    key: ValueKey('$replay-${sources[i].id}'),
+                    index: i,
+                    child: _SourceCard(
                       source: sources[i],
                       onTap: () => Navigator.of(context).push(SoftRoute(SourceSearchPage(source: sources[i]))),
                     ),
-            ),
+                  ),
           ),
       ]);
     });
   }
 }
 
-/// Big square card: logo, name, language.
+/// Book-like card: a spine on the left edge, the logo large and centred.
 class _SourceCard extends StatelessWidget {
   const _SourceCard({required this.source, required this.onTap});
   final MangaSource source;
@@ -89,20 +120,43 @@ class _SourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
-    return Pressable(
-      onTap: onTap,
-      child: AspectRatio(
-        aspectRatio: 1.05,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: p.line)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SourceLogo(source, size: 58),
-            const Spacer(),
-            Text(source.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.h2(context)),
-            const SizedBox(height: 4),
-            Text(languageName(source.lang, context.isEn), style: Txt.caption(context)),
-          ]),
+    return Tilt(
+      maxAngle: 0.1,
+      child: Pressable(
+        onTap: onTap,
+        child: AspectRatio(
+          aspectRatio: 0.82,
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(8), right: Radius.circular(22)),
+              border: Border.all(color: p.line),
+              boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 12))],
+            ),
+            child: Row(children: [
+              // Spine.
+              Container(
+                width: 14,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [p.accent.withValues(alpha: 0.55), p.accent.withValues(alpha: 0.12)]),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 20, 20, 18),
+                  child: Column(children: [
+                    const Spacer(),
+                    SourceLogo(source, size: 88),
+                    const Spacer(),
+                    Text(source.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: Txt.h2(context)),
+                    const SizedBox(height: 4),
+                    Text(languageName(source.lang, context.isEn), style: Txt.caption(context)),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
         ),
       ),
     );

@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'en_sites.dart';
+import 'fr_sites.dart';
+import 'ja_sites.dart';
+import 'madara.dart';
 import 'mangadex.dart';
 import 'mangathemesia.dart';
 import 'mangapill.dart';
@@ -11,14 +15,7 @@ import 'source.dart';
 
 /// Every source the app knows how to read.
 final List<MangaSource> allSources = [
-  MangaDex('fr', 'Français', 96),
-  MangaDex('en', 'English', 99),
-  MangaDex('es-la', 'Español (LatAm)', 78),
-  MangaDex('pt-br', 'Português (BR)', 76),
-  MangaDex('it', 'Italiano', 62),
-  MangaDex('de', 'Deutsch', 55),
-  MangaPill(),
-  ScanVF(),
+  // Français
   MangaThemesia(
     id: 'sushiscan',
     name: 'Sushi-Scan',
@@ -28,6 +25,28 @@ final List<MangaSource> allSources = [
     popularity: 90,
     genres: sushiScanGenres,
   ),
+  AnimeSama(),
+  MangaThemesia(id: 'lelmanga', name: 'LelManga', lang: 'fr', baseUrl: 'https://www.lelmanga.com', popularity: 80),
+  Madara(id: 'harmonyscan', name: 'Harmony Scan', lang: 'fr', baseUrl: 'https://harmony-scan.fr', popularity: 66),
+  Madara(id: 'pantheonscan', name: 'Pantheon Scan', lang: 'fr', baseUrl: 'https://pantheon-scan.com', popularity: 64),
+  ScanVF(),
+  LelscanFR(),
+  ScantradUnion(),
+  FMTeam(),
+  DassouScan(),
+  MangaDex('fr', 'Français', 58),
+  // English
+  WeebCentral(),
+  MangaPill(),
+  Atsumaru(),
+  MangaKatana(),
+  Toonily(),
+  Madara(id: 'manhwatop', name: 'ManhwaTop', lang: 'en', baseUrl: 'https://manhwatop.com', popularity: 68),
+  MangaDex('en', 'English', 60),
+  // 日本語
+  Rawdevart(),
+  MangaRW(),
+  MangaDex('ja', '日本語', 40),
 ];
 
 MangaSource? sourceById(String id) {
@@ -40,6 +59,7 @@ MangaSource? sourceById(String id) {
 const languageNames = {
   'fr': ('Français', 'French'),
   'en': ('Anglais', 'English'),
+  'ja': ('Japonais', 'Japanese'),
   'es-la': ('Espagnol', 'Spanish'),
   'pt-br': ('Portugais', 'Portuguese'),
   'it': ('Italien', 'Italian'),

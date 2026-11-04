@@ -118,16 +118,224 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final reduced = Motion.reduced(context);
+    // FadeTransition fades on the compositor; only the translate is rebuilt per frame.
+    return FadeTransition(
+      opacity: _t,
+      child: reduced
+          ? widget.child
+          : AnimatedBuilder(
+              animation: _t,
+              builder: (_, child) => Transform.translate(offset: Offset(0, (1 - _t.value) * widget.offset), child: child),
+              child: widget.child,
+            ),
+    );
+  }
+}
+
+/// Mechanical counter: each digit is a 0–9 strip that rolls a full turn and lands
+/// on its value, rightmost digit first. Replays (a quicker roll) when [replay] changes.
+/// Only a translation is animated; the strips are clipped to one line.
+class RollingNumber extends StatefulWidget {
+  const RollingNumber({super.key, required this.value, required this.style, this.replay = 0});
+
+  final int value;
+  final TextStyle style;
+  final int replay;
+
+  @override
+  State<RollingNumber> createState() => _RollingNumberState();
+}
+
+class _RollingNumberState extends State<RollingNumber> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void didUpdateWidget(RollingNumber old) {
+    super.didUpdateWidget(old);
+    if (old.replay != widget.replay || old.value != widget.value) {
+      _c.duration = const Duration(milliseconds: 900);
+      _c.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = widget.style.copyWith(height: 1);
+    final digits = widget.value.toString().split('');
+    if (Motion.reduced(context)) return Text(widget.value.toString(), style: style);
+    final size = (TextPainter(text: TextSpan(text: '0', style: style), textDirection: TextDirection.ltr)..layout()).size;
+    final line = size.height * 1.12;
+    const curve = Cubic(0.16, 1, 0.3, 1);
     return AnimatedBuilder(
-      animation: _t,
-      builder: (_, child) => Opacity(
-        opacity: _t.value,
-        child: Transform.translate(
-          offset: Offset(0, reduced ? 0 : (1 - _t.value) * widget.offset),
-          child: child,
+      animation: _c,
+      builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = 0; i < digits.length; i++) ...[
+          if (i > 0 && (digits.length - i) % 3 == 0) SizedBox(width: size.width * 0.25),
+          _strip(int.parse(digits[i]), digits.length - 1 - i, style, size.width, line, curve),
+        ],
+      ]),
+    );
+  }
+
+  Widget _strip(int digit, int fromRight, TextStyle style, double width, double line, Curve curve) {
+    final start = (fromRight * 0.07).clamp(0.0, 0.4);
+    final t = curve.transform(((_c.value - start) / (1 - start)).clamp(0.0, 1.0));
+    final travel = 10 + digit; // one full turn, then land on the digit
+    return SizedBox(
+      width: width,
+      height: line,
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          maxHeight: double.infinity,
+          child: Transform.translate(
+            offset: Offset(0, -travel * t * line),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              for (var n = 0; n < 20; n++)
+                SizedBox(height: line, child: Center(child: Text('${n % 10}', style: style))),
+            ]),
+          ),
         ),
       ),
-      child: widget.child,
+    );
+  }
+}
+
+/// Tilts its child in 3D toward the pointer (hover with a mouse, press with a finger),
+/// on two independent springs so it settles naturally and can be interrupted.
+/// Decorative only: transform, no layout.
+class Tilt extends StatefulWidget {
+  const Tilt({super.key, required this.child, this.maxAngle = 0.12, this.lift = 1.02});
+
+  final Widget child;
+  final double maxAngle; // radians
+  final double lift; // scale while tilted
+
+  @override
+  State<Tilt> createState() => _TiltState();
+}
+
+class _TiltState extends State<Tilt> with TickerProviderStateMixin {
+  late final _x = AnimationController.unbounded(vsync: this);
+  late final _y = AnimationController.unbounded(vsync: this);
+  late final _s = AnimationController.unbounded(vsync: this, value: 1);
+
+  void _to(AnimationController c, double target, {double damping = 0.8}) =>
+      c.animateWith(SpringSimulation(Motion.spring(damping: damping, response: 0.45), c.value, target, c.velocity));
+
+  void _track(Offset local, Size size) {
+    if (Motion.reduced(context) || size.isEmpty) return;
+    final dx = (local.dx / size.width - 0.5) * 2;
+    final dy = (local.dy / size.height - 0.5) * 2;
+    _to(_y, dx.clamp(-1.0, 1.0) * widget.maxAngle);
+    _to(_x, -dy.clamp(-1.0, 1.0) * widget.maxAngle);
+    _to(_s, widget.lift, damping: 1);
+  }
+
+  void _release() {
+    _to(_x, 0, damping: 0.7);
+    _to(_y, 0, damping: 0.7);
+    _to(_s, 1, damping: 0.9);
+  }
+
+  @override
+  void dispose() {
+    _x.dispose();
+    _y.dispose();
+    _s.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, box) {
+      final size = Size(box.maxWidth.isFinite ? box.maxWidth : 0, box.maxHeight.isFinite ? box.maxHeight : 0);
+      return MouseRegion(
+        onHover: (e) => _track(e.localPosition, size),
+        onExit: (_) => _release(),
+        child: Listener(
+          onPointerDown: (e) => _track(e.localPosition, size),
+          onPointerMove: (e) => _track(e.localPosition, size),
+          onPointerUp: (_) => _release(),
+          onPointerCancel: (_) => _release(),
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_x, _y, _s]),
+            builder: (_, child) => Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0011)
+                ..rotateX(_x.value)
+                ..rotateY(_y.value)
+                ..scaleByDouble(_s.value, _s.value, 1, 1),
+              child: child,
+            ),
+            child: widget.child,
+          ),
+        ),
+      );
+    });
+  }
+}
+
+/// Opens like a book cover hinged on its left edge, once, staggered by [index].
+class BookUnfold extends StatefulWidget {
+  const BookUnfold({super.key, required this.child, this.index = 0});
+
+  final Widget child;
+  final int index;
+
+  @override
+  State<BookUnfold> createState() => _BookUnfoldState();
+}
+
+class _BookUnfoldState extends State<BookUnfold> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 680));
+  late final _t = CurvedAnimation(parent: _c, curve: const Cubic(0.16, 1, 0.3, 1));
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration(milliseconds: 70 * widget.index.clamp(0, 10)), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (Motion.reduced(context)) return FadeTransition(opacity: _t, child: widget.child);
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _c, curve: const Interval(0, 0.35)),
+      child: AnimatedBuilder(
+        animation: _t,
+        builder: (_, child) => Transform(
+          alignment: Alignment.centerLeft,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0014)
+            ..rotateY((1 - _t.value) * -1.35),
+          child: child,
+        ),
+        child: widget.child,
+      ),
     );
   }
 }

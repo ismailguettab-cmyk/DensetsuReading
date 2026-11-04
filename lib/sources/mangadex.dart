@@ -199,6 +199,6 @@ class MangaDex extends MangaSource {
     final json = await Net.getJson('$_api/at-home/server/${chapter.url}');
     final base = json['baseUrl'] as String;
     final hash = json['chapter']['hash'] as String;
-    return [for (final f in json['chapter']['data'] as List) PageImage('$base/data/$hash/$f')];
+    return [for (final f in json['chapter']['data'] as List) PageImage('$base/data/$hash/$f', const {}, 'https://uploads.mangadex.org/data/$hash/$f')];
   }
 }

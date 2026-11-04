@@ -109,7 +109,7 @@ const _fr = <String, String>{
   'reader.translate': 'Traduire en français',
   'reader.translating': 'Traduction…',
   'reader.translated': 'Traduit',
-  'reader.noKey': 'Ajoute ta clé API Claude dans Paramètres → Traduction IA.',
+  'reader.noKey': 'Ajoute ta clé Gemini gratuite dans Paramètres → Traduction IA.',
   'reader.settings': 'Réglages de lecture',
   'reader.next': 'Chapitre suivant',
   'reader.prev': 'Chapitre précédent',
@@ -155,9 +155,9 @@ const _fr = <String, String>{
   'settings.pageNumber': 'Afficher le numéro de page',
   'settings.pageAnimation': 'Animer le changement de page',
   'settings.ai': 'Traduction IA',
-  'settings.claudeKey': 'Clé API Claude',
-  'settings.claudeKeyNote':
-      'Utilisée pour traduire les bulles et les résumés en français. Elle reste sur cet appareil. Clé à créer sur platform.claude.com.',
+  'settings.geminiKey': 'Clé Google Gemini (gratuite)',
+  'settings.geminiKeyNote':
+      'Utilisée pour traduire les bulles et les résumés en français. Gratuit : crée la clé en 1 minute sur aistudio.google.com avec ton compte Google, sans carte bancaire. Elle reste sur cet appareil.',
   'settings.account': 'Compte AniList',
   'settings.signedAs': 'Connecté en tant que',
   'settings.readOnly': 'lecture seule',
@@ -283,7 +283,7 @@ const _en = <String, String>{
   'reader.translate': 'Translate to French',
   'reader.translating': 'Translating…',
   'reader.translated': 'Translated',
-  'reader.noKey': 'Add your Claude API key in Settings → AI translation.',
+  'reader.noKey': 'Add your free Gemini key in Settings → AI translation.',
   'reader.settings': 'Reading settings',
   'reader.next': 'Next chapter',
   'reader.prev': 'Previous chapter',
@@ -329,9 +329,9 @@ const _en = <String, String>{
   'settings.pageNumber': 'Show page number',
   'settings.pageAnimation': 'Animate page turns',
   'settings.ai': 'AI translation',
-  'settings.claudeKey': 'Claude API key',
-  'settings.claudeKeyNote':
-      'Used to translate speech bubbles and synopses into French. It stays on this device. Create one at platform.claude.com.',
+  'settings.geminiKey': 'Google Gemini key (free)',
+  'settings.geminiKeyNote':
+      'Used to translate speech bubbles and synopses into French. Free: create it in a minute at aistudio.google.com with your Google account, no credit card. It stays on this device.',
   'settings.account': 'AniList account',
   'settings.signedAs': 'Signed in as',
   'settings.readOnly': 'read-only',

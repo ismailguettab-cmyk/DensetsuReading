@@ -179,24 +179,28 @@ class Recommender extends ChangeNotifier {
     final profile = buildProfile();
     final onList = _session.listIds;
 
-    // 1. Candidate pools per category, from a random slice of the most popular.
+    // 1. Candidate pools per category, picked by reviews rather than popularity:
+    //    well-rated titles of any reach, plus hidden gems (well-rated, small readership).
     final pools = <String, List<AniMedia>>{};
     const perRequest = 6;
     for (var i = 0; i < recoCategories.length; i += perRequest) {
       final group = recoCategories.skip(i).take(perRequest);
       final q = StringBuffer('query {');
       for (final c in group) {
-        final page = 1 + _rng.nextInt(3);
         final filter = c.genre != null ? 'genre: "${c.genre}"' : 'tag: "${c.tag}"';
-        q.write(' c_${c.key}: Page(page: $page, perPage: 25) { media(type: MANGA, format_not: NOVEL, isAdult: false, '
-            'sort: POPULARITY_DESC, $filter) { ...M } }');
+        const base = 'type: MANGA, format_not: NOVEL, isAdult: false, sort: SCORE_DESC';
+        q.write(' t_${c.key}: Page(page: ${1 + _rng.nextInt(3)}, perPage: 20) { media($base, averageScore_greater: 74, '
+            'popularity_lesser: 90000, $filter) { ...M } }');
+        q.write(' g_${c.key}: Page(page: ${1 + _rng.nextInt(4)}, perPage: 20) { media($base, averageScore_greater: 70, '
+            'popularity_lesser: 25000, popularity_greater: 300, $filter) { ...M } }');
       }
       q.write(' } $mediaFragment');
       final data = await api.query(q.toString());
       for (final c in group) {
-        pools[c.key] = ((data['c_${c.key}']?['media'] as List?) ?? const [])
-            .map((m) => AniMedia.fromJson(m as Map<String, dynamic>))
-            .toList();
+        pools[c.key] = [
+          for (final alias in ['t_${c.key}', 'g_${c.key}'])
+            ...((data[alias]?['media'] as List?) ?? const []).map((m) => AniMedia.fromJson(m as Map<String, dynamic>)),
+        ];
       }
     }
 
@@ -228,11 +232,11 @@ class Recommender extends ChangeNotifier {
     double score(AniMedia m) {
       final affinity = profile.genreAffinity(m);
       final c = (collab[m.id] ?? 0) / maxCollab;
-      final quality = ((m.meanScore ?? 62) - 50) / 40;
-      final pop = log(1 + (m.popularity ?? 0)) / log(250000);
+      // Reviews matter, readership doesn't: a small bonus even favours lesser-known titles.
+      final quality = (((m.meanScore ?? 62) - 55) / 35).clamp(-0.5, 1.2);
+      final discovery = 1 - (log(1 + (m.popularity ?? 0)) / log(250000)).clamp(0.0, 1.0);
       final search = profile.searchAffinity(m);
-      final repeat = _recentlyShown.contains(m.id) ? 0.35 : 0;
-      return 0.42 * affinity + 0.22 * c + 0.16 * quality + 0.1 * pop + 0.1 * search - repeat;
+      return 0.36 * affinity + 0.18 * c + 0.26 * quality + 0.14 * discovery + 0.06 * search;
     }
 
     // Weighted draw without replacement: good matches are likely, not guaranteed,

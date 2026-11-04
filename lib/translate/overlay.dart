@@ -14,35 +14,48 @@ class TranslationOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth, h = box.maxHeight;
+      final visible = bubbles.where((b) => b.replace).toList();
       return Stack(
         children: [
-          for (final b in bubbles)
-            if (b.replace) _bubble(b, w, h),
+          // 1. Erase only the original lettering, in the balloon's own colour, with soft edges,
+          //    so the artist's balloon (outline, shape, tail) stays untouched.
+          for (final b in visible) _eraser(b, w, h),
+          // 2. Letter the French text on a transparent background inside the balloon.
+          for (final b in visible) _text(b, w, h),
         ],
       );
     });
   }
 
-  Widget _bubble(Bubble b, double w, double h) {
-    final area = Rect.fromLTRB(b.area.left * w, b.area.top * h, b.area.right * w, b.area.bottom * h);
-    final round = b.kind == 'speech' || b.kind == 'thought';
-    // Original lettering size, so the French text never comes out bigger.
-    final originalSize = (b.textBox.height * h / b.lines) / 1.18;
-    final inset = round ? EdgeInsets.symmetric(horizontal: area.width * 0.09, vertical: area.height * 0.08) : EdgeInsets.all(area.shortestSide * 0.04);
+  Widget _eraser(Bubble b, double w, double h) {
+    final pad = (b.textBox.height * h * 0.06).clamp(1.5, 6.0);
+    final rect = Rect.fromLTRB(b.textBox.left * w, b.textBox.top * h, b.textBox.right * w, b.textBox.bottom * h)
+        .inflate(pad)
+        .intersect(Rect.fromLTRB(b.area.left * w, b.area.top * h, b.area.right * w, b.area.bottom * h).inflate(pad));
     return Positioned.fromRect(
-      rect: area,
+      rect: rect,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: b.background,
-          borderRadius: BorderRadius.circular(round ? area.shortestSide * 0.48 : area.shortestSide * 0.08),
+          borderRadius: BorderRadius.circular(pad * 2),
+          boxShadow: [BoxShadow(color: b.background, blurRadius: pad * 1.6, spreadRadius: pad * 0.3)],
         ),
-        child: Padding(
-          padding: inset,
-          child: _FitText(
-            text: b.uppercase ? b.translation.toUpperCase() : b.translation,
-            maxSize: originalSize.clamp(6.0, 64.0),
-            color: b.textColor,
-          ),
+      ),
+    );
+  }
+
+  Widget _text(Bubble b, double w, double h) {
+    final area = Rect.fromLTRB(b.area.left * w, b.area.top * h, b.area.right * w, b.area.bottom * h);
+    // Original lettering size, so the French text never comes out bigger.
+    final originalSize = (b.textBox.height * h / b.lines) / 1.18;
+    return Positioned.fromRect(
+      rect: area,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: area.width * 0.04, vertical: area.height * 0.03),
+        child: _FitText(
+          text: b.uppercase ? b.translation.toUpperCase() : b.translation,
+          maxSize: originalSize.clamp(6.0, 64.0),
+          color: b.textColor,
         ),
       ),
     );

@@ -82,7 +82,11 @@ class MangaPill extends MangaSource {
   }
 
   @override
-  Future<MangaList> popular(int page) => search('', page, const {});
+  Future<MangaList> popular(int page) async {
+    // Empty searches return nothing: trending comes from the home page, then the newest list.
+    final doc = html.parse(await Net.getText(page == 1 ? '$baseUrl/' : '$baseUrl/mangas/new'));
+    return MangaList(_cards(doc), hasNext: page == 1);
+  }
 
   @override
   Future<MangaList> search(String query, int page, FilterValues filters) async {

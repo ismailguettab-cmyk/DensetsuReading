@@ -21,8 +21,10 @@ Dépôt : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`)
 - `anilist/` : API GraphQL (limite 30 req/min → requêtes groupées par alias), session (jeton OAuth ou pseudo
   public en lecture seule), recommandeur.
 - `sources/` : contrat inspiré de TachiyomiSY (`MangaSource` : popular, search + filtres, details, chapters, pages).
-  MangaDex (une source par langue), MangaPill (EN), Scan-VF (FR), moteur `MangaThemesia` (Sushi-Scan).
-- `translate/` : traduction IA des bulles (Claude Opus 5.5, image en base64, sortie JSON imposée) et superposition.
+  Moteurs communs `Madara` et `MangaThemesia` + classes par site (`fr_sites.dart`, `en_sites.dart`, `ja_sites.dart`).
+  Langues : FR, EN, JA uniquement. Pages avec adresse de secours (MangaDex : uploads.mangadex.org) et nouvel essai auto.
+- `translate/` : traduction des bulles avec Google Gemini **gratuit** (clé aistudio.google.com, Flash puis Flash-Lite,
+  requêtes en file espacées). Pas d’option payante (demande de l’utilisateur). On efface seulement le texte d’origine.
 - `ui/` : shell (barre latérale en paysage, barre flottante en portrait, une pile de navigation par onglet),
   pages Accueil, Recommandations, Recherche, Sources, Paramètres, fiche manga, lecteur.
 
@@ -40,5 +42,6 @@ Dépôt : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`)
 
 ## À faire
 - Connexion AniList OAuth : l'utilisateur doit créer un client sur anilist.co (redirection `http://localhost:5173/auth`).
-- Clé API Claude à saisir dans Paramètres pour tester la traduction.
+- Clé Gemini gratuite à saisir dans Paramètres pour tester la traduction (pas encore testée).
+- APK via GitHub Actions (prochaine session).
 - Version tablette Android / iPad (SDK Android ou Mac requis), sources anglaises de everythingmoe.com.

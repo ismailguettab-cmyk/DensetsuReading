@@ -52,7 +52,7 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 22),
                   SettingsGroup(title: context.t('settings.reader'), children: const [ReaderSettingsForm()]),
                   const SizedBox(height: 22),
-                  SettingsGroup(title: context.t('settings.ai'), children: [_ClaudeKey(settings: set)]),
+                  SettingsGroup(title: context.t('settings.ai'), children: [_GeminiKey(settings: set)]),
                   const SizedBox(height: 22),
                   SettingsGroup(title: context.t('settings.account'), children: [
                     if (s.session.user != null)
@@ -259,16 +259,16 @@ class ReaderSettingsForm extends StatelessWidget {
   }
 }
 
-class _ClaudeKey extends StatefulWidget {
-  const _ClaudeKey({required this.settings});
+class _GeminiKey extends StatefulWidget {
+  const _GeminiKey({required this.settings});
   final Settings settings;
 
   @override
-  State<_ClaudeKey> createState() => _ClaudeKeyState();
+  State<_GeminiKey> createState() => _GeminiKeyState();
 }
 
-class _ClaudeKeyState extends State<_ClaudeKey> {
-  late final _c = TextEditingController(text: widget.settings.claudeKey);
+class _GeminiKeyState extends State<_GeminiKey> {
+  late final _c = TextEditingController(text: widget.settings.geminiKey);
   bool _hidden = true;
 
   @override
@@ -283,17 +283,17 @@ class _ClaudeKeyState extends State<_ClaudeKey> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(context.t('settings.claudeKey'), style: Txt.label(context)),
+        Text(context.t('settings.geminiKey'), style: Txt.label(context)),
         const SizedBox(height: 4),
-        Text(context.t('settings.claudeKeyNote'), style: Txt.caption(context)),
+        Text(context.t('settings.geminiKeyNote'), style: Txt.caption(context)),
         const SizedBox(height: 12),
         TextField(
           controller: _c,
           obscureText: _hidden,
-          onChanged: (v) => widget.settings.update((x) => x.claudeKey = v.trim()),
+          onChanged: (v) => widget.settings.update((x) => x.geminiKey = v.trim()),
           style: Txt.label(context).copyWith(fontWeight: FontWeight.w500),
           decoration: InputDecoration(
-            hintText: 'sk-ant-…',
+            hintText: 'AIza…',
             filled: true,
             fillColor: p.surface2,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -307,7 +307,7 @@ class _ClaudeKeyState extends State<_ClaudeKey> {
                   final text = data?.text?.trim();
                   if (text == null || text.isEmpty) return;
                   _c.text = text;
-                  widget.settings.update((x) => x.claudeKey = text);
+                  widget.settings.update((x) => x.geminiKey = text);
                 },
               ),
               IconButton(

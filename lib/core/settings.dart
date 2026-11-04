@@ -40,7 +40,7 @@ class Settings extends ChangeNotifier {
   bool showPageNumber = true;
   bool pageAnimation = true;
 
-  String claudeKey = '';
+  String geminiKey = '';
   String anilistClientId = const String.fromEnvironment('ANILIST_CLIENT_ID');
 
   void update(void Function(Settings s) change) {
@@ -63,7 +63,7 @@ class Settings extends ChangeNotifier {
         'background': background.name,
         'showPageNumber': showPageNumber,
         'pageAnimation': pageAnimation,
-        'claudeKey': claudeKey,
+        'geminiKey': geminiKey,
         'anilistClientId': anilistClientId,
       };
 
@@ -81,7 +81,7 @@ class Settings extends ChangeNotifier {
     background = _enum(ReaderBackground.values, j['background'], background);
     showPageNumber = j['showPageNumber'] as bool? ?? showPageNumber;
     pageAnimation = j['pageAnimation'] as bool? ?? pageAnimation;
-    claudeKey = j['claudeKey'] as String? ?? claudeKey;
+    geminiKey = j['geminiKey'] as String? ?? geminiKey;
     final id = j['anilistClientId'] as String?;
     if (id != null && id.isNotEmpty) anilistClientId = id;
   }
