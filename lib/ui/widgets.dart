@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../core/motion.dart';
@@ -10,7 +8,7 @@ import 'sakura.dart';
 
 /// Cover art that fades in once decoded, with a quiet placeholder meanwhile.
 class CoverImage extends StatelessWidget {
-  const CoverImage({super.key, required this.url, this.headers = const {}, this.radius = 12, this.heroTag, this.title});
+  const CoverImage({super.key, required this.url, this.headers = const {}, this.radius = 0, this.heroTag, this.title});
 
   final String? url;
   final Map<String, String> headers;
@@ -93,10 +91,8 @@ class MangaCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 2 / 3,
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 18, offset: Offset(0, 8))],
-                ),
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(border: InkStyle.border(context)),
                 child: Stack(fit: StackFit.expand, children: [
                   CoverImage(url: cover, headers: headers, heroTag: heroTag, title: title),
                   if (badge != null) Positioned(left: 8, top: 8, child: badge!),
@@ -127,11 +123,11 @@ class Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.pal;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-      decoration: BoxDecoration(color: color ?? p.accentSoft, borderRadius: BorderRadius.circular(99)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color, border: InkStyle.border(context)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (icon != null) ...[Icon(icon, size: 13, color: textColor ?? p.accent), const SizedBox(width: 5)],
-        Text(text, style: Txt.caption(context).copyWith(color: textColor ?? p.accent, fontWeight: FontWeight.w600)),
+        if (icon != null) ...[Icon(icon, size: 13, color: textColor ?? p.text), const SizedBox(width: 5)],
+        Text(text, style: Txt.caption(context).copyWith(color: textColor ?? p.text, fontWeight: FontWeight.w700)),
       ]),
     );
   }
@@ -152,10 +148,11 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
+    // Red for the one action that matters, ink for the rest, an ink outline for quiet ones.
     final (bg, fg) = switch (tone) {
       ButtonTone.cta => (p.cta, p.onCta),
-      ButtonTone.accent => (p.accent, p.bg),
-      ButtonTone.quiet => (p.surface2, p.text),
+      ButtonTone.accent => (p.text, p.bg),
+      ButtonTone.quiet => (Colors.transparent, p.text),
     };
     final enabled = onTap != null && !loading;
     return Pressable(
@@ -166,7 +163,7 @@ class AppButton extends StatelessWidget {
         child: Container(
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(color: bg, border: tone == ButtonTone.quiet ? InkStyle.border(context) : null),
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -206,8 +203,8 @@ class IconCircle extends StatelessWidget {
         duration: Motion.fast,
         width: size,
         height: size,
-        decoration: BoxDecoration(color: active ? p.accent : p.surface2, shape: BoxShape.circle),
-        child: Icon(icon, size: size * 0.48, color: active ? p.bg : p.text),
+        decoration: BoxDecoration(color: active ? p.text : Colors.transparent, shape: BoxShape.circle, border: InkStyle.border(context)),
+        child: Icon(icon, size: size * 0.46, color: active ? p.bg : p.text),
       ),
     );
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
@@ -225,8 +222,11 @@ class SectionTitle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(children: [
-        Expanded(child: Text(text, style: Txt.h2(context))),
-        ?trailing,
+        Text(text, style: Txt.h2(context)),
+        const SizedBox(width: 14),
+        // An ink rule runs from the title to the edge, like a chapter heading.
+        Expanded(child: Container(height: 2, color: context.pal.text)),
+        if (trailing != null) ...[const SizedBox(width: 14), trailing!],
       ]),
     );
   }
@@ -247,12 +247,7 @@ class EmptyState extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 380),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(20)),
-            child: Icon(icon, color: p.accent, size: 28),
-          ),
+          InkBlot(width: 96, height: 86, child: Icon(icon, color: p.bg, size: 34)),
           const SizedBox(height: 18),
           Text(title, textAlign: TextAlign.center, style: Txt.h2(context)),
           if (text != null) ...[
@@ -281,13 +276,12 @@ class SourceLogo extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(source.name.characters.first, style: Txt.h2(context).copyWith(fontSize: size * 0.42, color: p.accent)),
     );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.28),
+    return ClipRect(
       child: SizedBox(
         width: size,
         height: size,
         child: Container(
-          color: p.surface2,
+          decoration: BoxDecoration(color: p.surface, border: InkStyle.border(context)),
           padding: EdgeInsets.all(size * 0.18),
           child: Image.network(
             Net.image(source.iconUrl),
@@ -303,7 +297,7 @@ class SourceLogo extends StatelessWidget {
 
 /// Quiet loading block.
 class Skeleton extends StatelessWidget {
-  const Skeleton({super.key, this.width, this.height, this.radius = 12});
+  const Skeleton({super.key, this.width, this.height, this.radius = 0});
 
   final double? width, height;
   final double radius;
@@ -316,7 +310,7 @@ class Skeleton extends StatelessWidget {
       );
 }
 
-/// Frosted surface for floating chrome. Only used on bars that stay put.
+/// Surface for floating chrome (reader bars, portrait tab bar).
 class Glass extends StatelessWidget {
   const Glass({super.key, required this.child, this.radius = 18, this.tint, this.padding});
 
@@ -328,20 +322,11 @@ class Glass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: (tint ?? p.surface).withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: p.line),
-          ),
-          child: child,
-        ),
-      ),
+    // Paper panel with an ink border and an offset ink shadow (no blur in the ink design).
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(color: tint ?? p.bg, border: InkStyle.border(context), boxShadow: InkStyle.shadow(context)),
+      child: child,
     );
   }
 }
@@ -360,12 +345,12 @@ class Segmented<T> extends StatelessWidget {
     final index = options.indexWhere((o) => o.$1 == value).clamp(0, options.length - 1);
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth.isFinite ? box.maxWidth : options.length * 110.0;
-      final segment = (w - 8) / options.length;
+      final segment = (w - 4) / options.length;
       return Container(
         width: w,
-        height: 40,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(color: p.surface2, borderRadius: BorderRadius.circular(12)),
+        height: 42,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(border: InkStyle.border(context)),
         child: Stack(children: [
           AnimatedPositioned(
             duration: Motion.base,
@@ -374,13 +359,7 @@ class Segmented<T> extends StatelessWidget {
             top: 0,
             bottom: 0,
             width: segment,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: p.surface,
-                borderRadius: BorderRadius.circular(9),
-                boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 6, offset: Offset(0, 2))],
-              ),
-            ),
+            child: ColoredBox(color: p.text),
           ),
           Row(children: [
             for (final o in options)
@@ -395,7 +374,7 @@ class Segmented<T> extends StatelessWidget {
                         o.$2,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Txt.label(context).copyWith(fontSize: 13, color: o.$1 == value ? p.text : p.text2),
+                        style: Txt.label(context).copyWith(fontSize: 13, color: o.$1 == value ? p.bg : p.text),
                       ),
                     ),
                   ),
@@ -428,7 +407,8 @@ class SoftRoute<T> extends PageRouteBuilder<T> {
   @override
   TickerFuture didPush() {
     final overlay = navigator?.overlay;
-    if (overlay != null) SakuraBurst.play(overlay);
+    // Petals belong to the night theme; the day theme stays ink and paper.
+    if (overlay != null && Theme.of(overlay.context).brightness == Brightness.dark) SakuraBurst.play(overlay);
     return super.didPush();
   }
 }
@@ -438,11 +418,63 @@ void toast(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
-      content: Text(message, style: Txt.label(context)),
-      backgroundColor: p.surface2,
+      content: Text(message, style: Txt.label(context).copyWith(color: p.bg)),
+      backgroundColor: p.text,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: const RoundedRectangleBorder(),
       width: 420,
       duration: const Duration(seconds: 3),
     ));
+}
+
+/// Ink blot: the active tab, source seals and empty states sit on this shape.
+class InkBlot extends StatelessWidget {
+  const InkBlot({super.key, this.width = 64, this.height = 58, this.color, this.dot, this.child});
+
+  final double width, height;
+  final Color? color;
+
+  /// Optional small drop in the top-right corner (blood red on the active tab).
+  final Color? dot;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: CustomPaint(
+        painter: _InkBlotPainter(color ?? context.pal.text, dot),
+        child: child == null ? null : Center(child: child),
+      ),
+    );
+  }
+}
+
+class _InkBlotPainter extends CustomPainter {
+  _InkBlotPainter(this.color, this.dot);
+
+  final Color color;
+  final Color? dot;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Drawn in a 64 x 58 box (the shape used on the design canvas), then stretched to fit.
+    canvas.scale(size.width / 64, size.height / 58);
+    final ink = Paint()..color = color;
+    final blot = Path()
+      ..moveTo(10, 14)
+      ..cubicTo(18, 3, 44, 1, 55, 9)
+      ..cubicTo(64, 16, 63, 35, 54, 44)
+      ..cubicTo(44, 54, 21, 57, 10, 48)
+      ..cubicTo(1, 41, 3, 23, 10, 14)
+      ..close();
+    canvas.drawPath(blot, ink);
+    canvas.drawCircle(const Offset(58, 50), 2.6, ink);
+    canvas.drawCircle(const Offset(5, 8), 1.8, ink);
+    if (dot != null) canvas.drawCircle(const Offset(52, 10), 4, Paint()..color = dot!);
+  }
+
+  @override
+  bool shouldRepaint(_InkBlotPainter old) => old.color != color || old.dot != dot;
 }

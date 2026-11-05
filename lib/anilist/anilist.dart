@@ -267,6 +267,18 @@ class AniList {
         .toList();
   }
 
+  /// Main character of a manga (name and picture), for the home page portrait.
+  Future<(String, String)?> mainCharacter(int mediaId) async {
+    final data = await query(
+      r'query($id: Int) { Media(id: $id) { characters(role: MAIN, perPage: 1, sort: FAVOURITES_DESC) { nodes { name { full } image { large } } } } }',
+      {'id': mediaId},
+    );
+    final nodes = (data['Media']?['characters']?['nodes'] as List?) ?? const [];
+    if (nodes.isEmpty) return null;
+    final image = nodes.first['image']?['large'] as String?;
+    return image == null ? null : (nodes.first['name']?['full'] as String? ?? '', image);
+  }
+
   Future<void> saveEntry(int mediaId, {String? status, int? progress}) async {
     await query(
       r'mutation($id: Int, $s: MediaListStatus, $p: Int) { SaveMediaListEntry(mediaId: $id, status: $s, progress: $p) { id } }',

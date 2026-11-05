@@ -323,6 +323,7 @@ class _ReaderPageState extends State<ReaderPage> {
       chapterName: chapter.name,
       page: _page,
       anilistId: widget.ani?.id,
+      total: _pages.length,
       at: DateTime.now(),
     ));
   }

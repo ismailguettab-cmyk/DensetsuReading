@@ -29,12 +29,14 @@ class ReadEvent {
     required this.page,
     required this.at,
     this.anilistId,
+    this.total,
   });
 
   final String sourceId, mangaUrl, title, chapterUrl, chapterName;
   final String? cover;
   final int page;
   final int? anilistId;
+  final int? total; // pages in the chapter
   final DateTime at;
 
   String get key => '$sourceId|$mangaUrl';
@@ -48,6 +50,7 @@ class ReadEvent {
         'cn': chapterName,
         'p': page,
         'a': anilistId,
+        'n': total,
         'at': at.millisecondsSinceEpoch,
       };
 
@@ -60,6 +63,7 @@ class ReadEvent {
         chapterName: j['cn'] as String,
         page: j['p'] as int? ?? 0,
         anilistId: j['a'] as int?,
+        total: j['n'] as int?,
         at: DateTime.fromMillisecondsSinceEpoch(j['at'] as int),
       );
 }

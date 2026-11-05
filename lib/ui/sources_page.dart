@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../core/l10n.dart';
 import '../core/motion.dart';
@@ -6,9 +9,12 @@ import '../core/services.dart';
 import '../core/theme.dart';
 import '../sources/catalog.dart';
 import '../sources/source.dart';
+import 'ink.dart';
 import 'shell.dart';
 import 'widgets.dart';
 
+/// Sources (day mode): language tabs underlined in red brush, installed sources on paper
+/// with a red "INSTALLÉE" seal, available ones in dashed outline.
 class SourcesPage extends StatefulWidget {
   const SourcesPage({super.key});
 
@@ -24,7 +30,6 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget build(BuildContext context) {
     final store = Services.i.sources;
     final pad = pagePadding(context);
-    final langs = {for (final s in allSources) s.lang}.toList()..sort((a, b) => a == 'fr' ? -1 : (b == 'fr' ? 1 : a.compareTo(b)));
     return Scaffold(
       body: ListenableBuilder(
         listenable: store,
@@ -34,33 +39,37 @@ class _SourcesPageState extends State<SourcesPage> {
           final mine = list.where(store.isInstalled).toList();
           final available = list.where((s) => !store.isInstalled(s)).toList();
           return ListView(padding: pad, children: [
-            Text(context.t('sources.title'), style: Txt.display(context)),
+            Text(context.t('sources.title'), style: Txt.display(context).copyWith(fontSize: 54)),
             const SizedBox(height: 8),
-            Text(context.t('sources.subtitle'), style: Txt.body(context)),
-            const SizedBox(height: 26),
-            Wrap(spacing: 10, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              _Chip(label: context.t('sources.all'), selected: _lang.isEmpty, onTap: () => setState(() => _lang = '')),
-              for (final l in langs)
-                _Chip(label: languageName(l, context.isEn), selected: _lang == l, onTap: () => setState(() => _lang = l)),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 240,
-                child: Segmented<bool>(
-                  value: _byName,
-                  options: [(false, context.t('sources.byPopularity')), (true, context.t('sources.byName'))],
-                  onChanged: (v) => setState(() => _byName = v),
-                ),
-              ),
-            ]),
+            Text(context.t('sources.subtitle'), style: Txt.body(context).copyWith(fontSize: 16)),
+            const SizedBox(height: 22),
+            Container(
+              padding: const EdgeInsets.only(bottom: 6),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkBlack, width: 2))),
+              child: Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 10, children: [
+                Wrap(spacing: 22, children: [
+                  for (final (k, label) in [('', context.t('sources.all')), ('fr', languageName('fr', context.isEn)), ('en', languageName('en', context.isEn)), ('ja', languageName('ja', context.isEn))])
+                    _Tab(label: label, active: _lang == k, onTap: () => setState(() => _lang = k)),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(context.isEn ? 'Sort by' : 'Trier par', style: Txt.body(context).copyWith(fontSize: 14, color: context.pal.text3)),
+                  const SizedBox(width: 10),
+                  _Square(label: context.t('sources.byPopularity'), active: !_byName, onTap: () => setState(() => _byName = false)),
+                  _Square(label: context.t('sources.byName'), active: _byName, onTap: () => setState(() => _byName = true)),
+                ]),
+              ]),
+            ),
             if (mine.isNotEmpty) ...[
-              const SizedBox(height: 34),
-              SectionTitle(context.t('sources.mine')),
-              _Grid(sources: mine),
+              const SizedBox(height: 20),
+              _Heading(context.t('sources.mine'), mine.length),
+              const SizedBox(height: 12),
+              _Grid(sources: mine, base: 0),
             ],
             if (available.isNotEmpty) ...[
-              const SizedBox(height: 34),
-              SectionTitle(context.t('sources.available')),
-              _Grid(sources: available),
+              const SizedBox(height: 26),
+              _Heading(context.t('sources.available'), available.length),
+              const SizedBox(height: 12),
+              _Grid(sources: available, base: 200),
             ],
           ]);
         },
@@ -69,138 +78,247 @@ class _SourcesPageState extends State<SourcesPage> {
   }
 }
 
+class _Heading extends StatelessWidget {
+  const _Heading(this.text, this.count);
+  final String text;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Text.rich(TextSpan(children: [
+        TextSpan(text: text, style: Txt.h2(context)),
+        TextSpan(text: '  · $count', style: Txt.caption(context).copyWith(fontSize: 14)),
+      ]));
+}
+
+class _Tab extends StatelessWidget {
+  const _Tab({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        child: SizedBox(
+          height: 44,
+          child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+            if (active) const Positioned(left: -4, right: -4, bottom: 4, child: InkUnderline()),
+            Text(label, style: Txt.label(context).copyWith(fontSize: 16, fontWeight: active ? FontWeight.w900 : FontWeight.w500)),
+          ]),
+        ),
+      );
+}
+
+class _Square extends StatelessWidget {
+  const _Square({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Transform.translate(
+        offset: const Offset(-2, 0),
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: active ? inkBlack : Colors.transparent, border: Border.all(color: inkBlack, width: 2)),
+            child: Text(label, style: Txt.label(context).copyWith(color: active ? inkPaper : inkBlack)),
+          ),
+        ),
+      );
+}
+
 class _Grid extends StatelessWidget {
-  const _Grid({required this.sources});
+  const _Grid({required this.sources, required this.base});
   final List<MangaSource> sources;
+  final int base;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final columns = (box.maxWidth / 340).floor().clamp(1, 4);
-      const gap = 14.0;
+      final columns = box.maxWidth >= 700 ? 2 : 1;
+      const gap = 24.0;
       final w = (box.maxWidth - gap * (columns - 1)) / columns;
-      return Wrap(spacing: gap, runSpacing: gap, children: [
+      return Wrap(spacing: gap, runSpacing: 12, children: [
         for (var i = 0; i < sources.length; i++)
-          SizedBox(width: w, child: Reveal(index: i, child: SourceTile(source: sources[i]))),
+          SizedBox(
+            width: w,
+            child: OneShot(
+              key: ValueKey(sources[i].id),
+              delay: Duration(milliseconds: base + 40 * min(i, 14)),
+              builder: (context, t, child) => Opacity(
+                opacity: t,
+                child: Transform.translate(offset: Offset(0, 12 * (1 - const Cubic(0.2, 0.8, 0.2, 1).transform(t))), child: child),
+              ),
+              child: SourceTile(source: sources[i], angle: ((i * 37) % 40 - 20) * pi / 180),
+            ),
+          ),
       ]);
     });
   }
 }
 
+/// One source row. Also used by the Search tab when nothing is installed yet.
 class SourceTile extends StatelessWidget {
-  const SourceTile({super.key, required this.source, this.onTap, this.showInstall = true});
+  const SourceTile({super.key, required this.source, this.angle = 0});
 
   final MangaSource source;
-  final VoidCallback? onTap;
-  final bool showInstall;
+  final double angle;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.pal;
     final store = Services.i.sources;
     final installed = store.isInstalled(source);
-    return Pressable(
-      onTap: onTap,
-      scale: 0.98,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: p.line)),
-        child: Row(children: [
-          SourceLogo(source, size: 48),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(source.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.title(context)),
-              const SizedBox(height: 4),
-              Row(children: [
-                Text(languageName(source.lang, context.isEn), style: Txt.caption(context)),
-                const SizedBox(width: 10),
-                _Popularity(value: source.popularity),
-              ]),
-            ]),
+    final pop = (source.popularity / 20).ceil().clamp(1, 5);
+    final row = Row(children: [
+      SizedBox(
+        width: 48,
+        height: 44,
+        child: Stack(alignment: Alignment.center, children: [
+          Transform.rotate(
+            angle: angle,
+            child: installed ? const InkBlot(width: 48, height: 44) : const CustomPaint(size: Size(48, 44), painter: _BlotOutline()),
           ),
-          if (showInstall) ...[
-            const SizedBox(width: 10),
-            AnimatedSwitcher(
-              duration: Motion.fast,
-              transitionBuilder: (child, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(a), child: child)),
-              child: installed
-                  ? Pressable(
-                      key: const ValueKey('remove'),
-                      onTap: () => store.remove(source),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                        decoration: BoxDecoration(color: p.surface2, borderRadius: BorderRadius.circular(11)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.check_rounded, size: 16, color: p.accent),
-                          const SizedBox(width: 5),
-                          Text(context.t('sources.installed'), style: Txt.caption(context).copyWith(color: p.text, fontWeight: FontWeight.w600)),
-                        ]),
-                      ),
-                    )
-                  : Pressable(
-                      key: const ValueKey('install'),
-                      onTap: () => store.install(source),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        decoration: BoxDecoration(color: p.accent, borderRadius: BorderRadius.circular(11)),
-                        child: Text(context.t('sources.install'), style: Txt.caption(context).copyWith(color: p.bg, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-            ),
-          ],
+          Text(
+            InitialsBlot.initials(source.name),
+            style: GoogleFonts.notoSerifJp(fontSize: 15, fontWeight: FontWeight.w800, color: installed ? inkPaper : inkBlack),
+          ),
         ]),
       ),
+      const SizedBox(width: 16),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(source.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.title(context).copyWith(fontSize: 16)),
+          const SizedBox(height: 3),
+          Row(children: [
+            Text(languageName(source.lang, context.isEn), style: Txt.caption(context)),
+            const SizedBox(width: 10),
+            for (var k = 1; k <= 5; k++)
+              Container(
+                width: 7,
+                height: 7,
+                margin: const EdgeInsets.only(right: 3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: k <= pop ? inkBlack : Colors.transparent,
+                  border: Border.all(color: inkBlack, width: 1.5),
+                ),
+              ),
+          ]),
+        ]),
+      ),
+      const SizedBox(width: 10),
+      AnimatedSwitcher(
+        duration: Motion.fast,
+        child: installed
+            ? Pressable(
+                key: const ValueKey('remove'),
+                onTap: () => store.remove(source),
+                child: Tooltip(
+                  message: context.t('sources.remove'),
+                  child: OneShot(
+                    duration: const Duration(milliseconds: 300),
+                    builder: (context, t, child) {
+                      final s = t < 0.6 ? 2 - 1.08 * (t / 0.6) : 0.92 + 0.08 * ((t - 0.6) / 0.4);
+                      return Opacity(opacity: (t / 0.4).clamp(0.0, 1.0), child: Transform.rotate(angle: -6 * pi / 180, child: Transform.scale(scale: s, child: child)));
+                    },
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(border: Border.all(color: inkRed, width: 2)),
+                      child: Text(context.isEn ? 'INSTALLED' : 'INSTALLÉE', style: Txt.tag(context).copyWith(color: inkRed, letterSpacing: 1)),
+                    ),
+                  ),
+                ),
+              )
+            : Pressable(
+                key: const ValueKey('install'),
+                onTap: () => store.install(source),
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  alignment: Alignment.center,
+                  color: inkBlack,
+                  child: Text(context.t('sources.install'), style: Txt.label(context).copyWith(color: inkPaper)),
+                ),
+              ),
+      ),
+    ]);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 68),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: installed ? BoxDecoration(color: const Color(0xFFFBF8F1), border: Border.all(color: inkBlack, width: 2)) : null,
+      foregroundDecoration: installed ? null : const _DashedBorder(),
+      child: row,
     );
   }
 }
 
-class _Popularity extends StatelessWidget {
-  const _Popularity({required this.value});
-  final int value;
+class _BlotOutline extends CustomPainter {
+  const _BlotOutline();
 
   @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    final bars = (value / 20).ceil().clamp(1, 5);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      for (var i = 0; i < 5; i++)
-        Container(
-          width: 4,
-          height: 6.0 + i * 2,
-          margin: const EdgeInsets.only(right: 2),
-          decoration: BoxDecoration(color: i < bars ? p.accent : p.surface2, borderRadius: BorderRadius.circular(2)),
-        ),
-    ]);
+  void paint(Canvas canvas, Size size) {
+    final path = scaledPath('M10 14C18 3 44 1 55 9c9 7 8 26-1 35-10 10-33 13-44 4C1 41 3 23 10 14z', const Size(64, 58), size);
+    canvas.drawPath(path, Paint()
+      ..color = inkBlack
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5);
+  }
+
+  @override
+  bool shouldRepaint(_BlotOutline old) => false;
+}
+
+/// 2 px dashed ink border (available sources).
+class _DashedBorder extends Decoration {
+  const _DashedBorder();
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _DashedPainter();
+}
+
+class _DashedPainter extends BoxPainter {
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration config) {
+    final r = (offset & config.size!).deflate(1);
+    final paint = Paint()
+      ..color = inkBlack
+      ..strokeWidth = 2;
+    void dash(Offset a, Offset b) {
+      final len = (b - a).distance, dir = (b - a) / len;
+      for (var d = 0.0; d < len; d += 9) {
+        canvas.drawLine(a + dir * d, a + dir * min(d + 5, len), paint);
+      }
+    }
+
+    dash(r.topLeft, r.topRight);
+    dash(r.topRight, r.bottomRight);
+    dash(r.bottomRight, r.bottomLeft);
+    dash(r.bottomLeft, r.topLeft);
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap});
+/// Square ink chip used by the search filters.
+class FilterChipButton extends StatelessWidget {
+  const FilterChipButton({super.key, required this.label, required this.selected, required this.onTap});
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    return Pressable(
-      onTap: onTap,
-      scale: 0.95,
-      child: AnimatedContainer(
-        duration: Motion.fast,
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? p.text : p.surface,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: selected ? p.text : p.line),
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        scale: 0.95,
+        child: AnimatedContainer(
+          duration: Motion.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(color: selected ? inkBlack : Colors.transparent, border: Border.all(color: inkBlack, width: 2)),
+          child: Text(label, style: Txt.label(context).copyWith(fontSize: 13, color: selected ? inkPaper : inkBlack)),
         ),
-        child: Text(label, style: Txt.label(context).copyWith(fontSize: 13, color: selected ? p.bg : p.text2)),
-      ),
-    );
-  }
-}
-
-class FilterChipButton extends _Chip {
-  const FilterChipButton({required super.label, required super.selected, required super.onTap});
+      );
 }

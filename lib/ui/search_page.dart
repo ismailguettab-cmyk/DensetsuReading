@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../core/theme.dart';
 import '../sources/catalog.dart';
 import '../sources/mangadex.dart';
 import '../sources/source.dart';
+import 'ink.dart';
 import 'manga_page.dart';
 import 'shell.dart';
 import 'sources_page.dart';
@@ -66,16 +68,87 @@ class _SearchPageState extends State<SearchPage> {
               _SourceGrid(sources: suggested, install: true),
             ]);
           }
-          return ListView(padding: pad, children: [
-            Text(context.t('search.title'), style: Txt.display(context)),
-            const SizedBox(height: 8),
-            Text(context.t('search.pick'), style: Txt.body(context)),
-            const SizedBox(height: 28),
-            _SourceGrid(sources: installed, replay: _replay),
-          ]);
+          return _PageTurn(
+            key: ValueKey(_replay),
+            child: ListView(padding: pad, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Stack(clipBehavior: Clip.none, children: [
+                      const Positioned(left: -6, right: -10, bottom: -6, child: SizedBox(height: 22, child: _TitleUnderline())),
+                      Text(context.t('search.title'), style: Txt.display(context).copyWith(fontSize: 54)),
+                    ]),
+                    const SizedBox(height: 10),
+                    Text(context.t('search.pick'), style: Txt.body(context).copyWith(fontSize: 16)),
+                  ]),
+                ),
+                Text(
+                  '${installed.length} ${context.isEn ? 'sources installed' : 'sources installées'}',
+                  style: Txt.label(context).copyWith(fontSize: 13, color: context.pal.text3),
+                ),
+              ]),
+              const SizedBox(height: 26),
+              _SourceGrid(sources: installed, replay: _replay),
+            ]),
+          );
         },
       ),
     );
+  }
+}
+
+class _TitleUnderline extends StatelessWidget {
+  const _TitleUnderline();
+
+  @override
+  Widget build(BuildContext context) => const PaintReveal(
+        delay: Duration(milliseconds: 150),
+        duration: Duration(milliseconds: 400),
+        curve: Cubic(0.8, 0, 0.2, 1),
+        child: BrushShape(Brush.underline, color: inkRed),
+      );
+}
+
+/// Arriving on the tab: the previous page turns away on its left edge, its shadow fading.
+class _PageTurn extends StatelessWidget {
+  const _PageTurn({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (Motion.reduced(context)) return child;
+    return Stack(children: [
+      child,
+      IgnorePointer(
+        child: OneShot(
+          delay: const Duration(milliseconds: 50),
+          duration: const Duration(milliseconds: 750),
+          builder: (context, t, _) {
+            if (t >= 1) return const SizedBox.shrink();
+            final e = const Cubic(0.55, 0, 0.25, 1).transform(t);
+            return Stack(children: [
+              Positioned.fill(child: ColoredBox(color: inkBlack.withValues(alpha: 0.35 * (1 - t)))),
+              Positioned.fill(
+                child: Transform(
+                  alignment: Alignment.centerLeft,
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 1 / 2200)
+                    ..rotateY(-e * 100 * pi / 180),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFBF8F1),
+                      border: Border(right: BorderSide(color: inkBlack, width: 2)),
+                      gradient: LinearGradient(colors: [Color(0xFFFBF8F1), Color(0xFFFBF8F1), Color(0x2E121010)], stops: [0, 0.96, 1]),
+                    ),
+                    child: const Align(alignment: Alignment(0.5, -0.1), child: InkBlot(width: 380, height: 380)),
+                  ),
+                ),
+              ),
+            ]);
+          },
+        ),
+      ),
+    ]);
   }
 }
 
@@ -87,76 +160,128 @@ class _SourceGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const rots = [-8.0, 12.0, -3.0, 20.0, -14.0, 6.0, -20.0, 9.0, -6.0];
     return LayoutBuilder(builder: (context, box) {
-      final columns = (box.maxWidth / 220).floor().clamp(2, 6);
-      const gap = 16.0;
+      final columns = (box.maxWidth / 200).floor().clamp(2, 5);
+      const gap = 24.0;
       final w = (box.maxWidth - gap * (columns - 1)) / columns;
+      Widget cardIn(int i, Widget child) => OneShot(
+            key: ValueKey('$replay-$i'),
+            delay: Duration(milliseconds: 300 + 50 * min(i, 12)),
+            duration: const Duration(milliseconds: 400),
+            builder: (context, t, c) {
+              final e = const Cubic(0.2, 0.8, 0.2, 1).transform(t);
+              return Opacity(
+                opacity: t,
+                child: Transform.translate(offset: Offset(0, 24 * (1 - e)), child: Transform.rotate(angle: -3 * pi / 180 * (1 - e), child: c)),
+              );
+            },
+            child: child,
+          );
       return Wrap(spacing: gap, runSpacing: gap, children: [
         for (var i = 0; i < sources.length; i++)
           SizedBox(
-            width: install ? (box.maxWidth >= 700 ? (box.maxWidth - gap) / 2 : box.maxWidth) : w,
+            width: install ? (box.maxWidth >= 700 ? (box.maxWidth - 16) / 2 : box.maxWidth) : w,
             child: install
                 ? Reveal(index: i, child: SourceTile(source: sources[i]))
-                : BookUnfold(
-                    key: ValueKey('$replay-${sources[i].id}'),
-                    index: i,
-                    child: _SourceCard(
+                : cardIn(
+                    i,
+                    _SourceCard(
                       source: sources[i],
+                      angle: rots[i % rots.length] * pi / 180,
                       onTap: () => Navigator.of(context).push(SoftRoute(SourceSearchPage(source: sources[i]))),
                     ),
                   ),
+          ),
+        if (!install)
+          SizedBox(
+            width: w,
+            child: cardIn(
+              sources.length,
+              Pressable(
+                onTap: () => ShellScope.of(context).select(3),
+                child: Container(
+                  height: 252,
+                  decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: const BoxDecoration(color: inkRed, shape: BoxShape.circle),
+                      child: const Icon(Icons.add_rounded, color: inkPaper, size: 28),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(context.isEn ? 'Add a source' : 'Ajouter une source', style: Txt.h2(context).copyWith(fontSize: 18)),
+                    const SizedBox(height: 2),
+                    Text(context.isEn ? 'in the Sources tab' : 'dans l’onglet Sources', style: Txt.caption(context)),
+                  ]),
+                ),
+              ),
+            ),
           ),
       ]);
     });
   }
 }
 
-/// Book-like card: a spine on the left edge, the logo large and centred.
-class _SourceCard extends StatelessWidget {
-  const _SourceCard({required this.source, required this.onTap});
+/// Paper card: the source's initials in an ink blot, its language on a tilted red tag.
+/// Lifts and deepens its ink shadow under the pointer.
+class _SourceCard extends StatefulWidget {
+  const _SourceCard({required this.source, required this.onTap, this.angle = 0});
   final MangaSource source;
   final VoidCallback onTap;
+  final double angle;
+
+  @override
+  State<_SourceCard> createState() => _SourceCardState();
+}
+
+class _SourceCardState extends State<_SourceCard> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.pal;
-    return Tilt(
-      maxAngle: 0.1,
+    final s = widget.source;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
       child: Pressable(
-        onTap: onTap,
-        child: AspectRatio(
-          aspectRatio: 0.82,
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: p.surface,
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(8), right: Radius.circular(22)),
-              border: Border.all(color: p.line),
-              boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 12))],
-            ),
-            child: Row(children: [
-              // Spine.
-              Container(
-                width: 14,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [p.accent.withValues(alpha: 0.55), p.accent.withValues(alpha: 0.12)]),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 20, 20, 18),
-                  child: Column(children: [
-                    const Spacer(),
-                    SourceLogo(source, size: 88),
-                    const Spacer(),
-                    Text(source.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: Txt.h2(context)),
-                    const SizedBox(height: 4),
-                    Text(languageName(source.lang, context.isEn), style: Txt.caption(context)),
-                  ]),
-                ),
-              ),
-            ]),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: Motion.fast,
+          curve: const Cubic(0.2, 0.8, 0.2, 1),
+          height: 252,
+          transform: Matrix4.translationValues(0, _hover ? -6 : 0, 0)..rotateZ(_hover ? -1 * pi / 180 : 0),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFBF8F1),
+            border: Border.all(color: inkBlack, width: 2),
+            boxShadow: [BoxShadow(color: inkBlack, offset: _hover ? const Offset(9, 9) : const Offset(5, 5))],
           ),
+          child: Stack(children: [
+            Align(alignment: const Alignment(0, -0.62), child: InitialsBlot(name: s.name, angle: widget.angle)),
+            Positioned(
+              right: 12,
+              top: 12,
+              child: Transform.rotate(
+                angle: -8 * pi / 180,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(border: Border.all(color: inkRed, width: 2)),
+                  child: Text(s.lang.toUpperCase(), style: Txt.tag(context).copyWith(color: inkRed, letterSpacing: 1)),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 10,
+              right: 10,
+              bottom: 22,
+              child: Column(children: [
+                Text(s.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: Txt.h2(context).copyWith(fontSize: 20, height: 1.1)),
+                const SizedBox(height: 4),
+                Text(languageName(s.lang, context.isEn), style: Txt.caption(context)),
+              ]),
+            ),
+          ]),
         ),
       ),
     );
@@ -277,7 +402,7 @@ class _SourceSearchPageState extends State<SourceSearchPage> {
               Row(children: [
                 IconCircle(icon: Icons.arrow_back_rounded, onTap: () => Navigator.of(context).pop(), tooltip: context.t('search.change')),
                 const SizedBox(width: 16),
-                SourceLogo(source, size: 40),
+                InitialsBlot(name: source.name, size: 58),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -354,7 +479,9 @@ class _SourceSearchPageState extends State<SourceSearchPage> {
             ]),
           ),
         ),
-        if (_items.isEmpty && !_loading)
+        if (_items.isEmpty && _loading)
+          SliverFillRemaining(hasScrollBody: false, child: _InkingSheet(sourceName: source.name))
+        else if (_items.isEmpty && !_loading)
           SliverFillRemaining(
             hasScrollBody: false,
             child: _error != null
@@ -379,10 +506,9 @@ class _SourceSearchPageState extends State<SourceSearchPage> {
               itemBuilder: (context, i) {
                 final m = _items[i];
                 final tag = 'src-${m.sourceId}-${m.url}';
-                return Reveal(
-                  index: i % 24,
-                  step: 25,
-                  offset: 8,
+                return _BlotReveal(
+                  delay: Duration(milliseconds: 150 + (i % 24) ~/ 6 * 250 + (i * 53) % 250),
+                  red: i % 5 == 2,
                   child: MangaCard(
                     width: double.infinity,
                     title: m.title,
@@ -398,7 +524,7 @@ class _SourceSearchPageState extends State<SourceSearchPage> {
         SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.only(top: 20, bottom: pad.bottom),
-            child: _loading ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: p.accent)) : null,
+            child: _loading && _items.isNotEmpty ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: inkBlack)) : null,
           ),
         ),
       ]),
@@ -486,4 +612,142 @@ class _FilterSheetState extends State<_FilterSheet> {
       ),
     );
   }
+}
+
+/// While the first page loads: a sheet sways and gets inked stroke by stroke, then flooded.
+class _InkingSheet extends StatefulWidget {
+  const _InkingSheet({required this.sourceName});
+  final String sourceName;
+
+  @override
+  State<_InkingSheet> createState() => _InkingSheetState();
+}
+
+class _InkingSheetState extends State<_InkingSheet> with SingleTickerProviderStateMixin {
+  late final _sway = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600))..repeat();
+
+  static const _strokes = [
+    (-20.0, 30.0, 300.0, 70.0, -8.0, 0, false, false),
+    (-10.0, 110.0, 290.0, 80.0, 6.0, 160, true, false),
+    (-30.0, 190.0, 320.0, 70.0, -4.0, 320, false, false),
+    (10.0, 150.0, 220.0, 40.0, -14.0, 460, true, true),
+    (-20.0, 250.0, 300.0, 90.0, 9.0, 580, true, false),
+    (0.0, 70.0, 280.0, 60.0, 32.0, 720, false, false),
+    (-20.0, 170.0, 300.0, 60.0, -28.0, 860, false, false),
+    (-10.0, 0.0, 280.0, 70.0, 3.0, 1000, true, false),
+    (-10.0, 284.0, 290.0, 70.0, -3.0, 1140, false, false),
+  ];
+
+  @override
+  void dispose() {
+    _sway.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = Motion.reduced(context);
+    final sheet = Container(
+      width: 260,
+      height: 340,
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBF8F1),
+        border: Border.all(color: inkBlack, width: 2),
+        boxShadow: const [BoxShadow(color: Color(0x40121010), offset: Offset(8, 8))],
+      ),
+      child: Stack(clipBehavior: Clip.hardEdge, children: [
+        for (final (x, y, w, h, r, d, left, red) in _strokes)
+          Positioned(
+            left: x,
+            top: y,
+            width: w,
+            height: h,
+            child: Transform.rotate(
+              angle: r * pi / 180,
+              child: PaintReveal(
+                delay: Duration(milliseconds: d),
+                duration: const Duration(milliseconds: 170),
+                fromRight: left,
+                child: BrushShape(left ? Brush.sweepLeft : Brush.sweepRight, color: red ? inkRed : inkBlack),
+              ),
+            ),
+          ),
+        const Positioned.fill(
+          child: InkDots(
+            delay: Duration(milliseconds: 240),
+            dots: [(0.15, 0.18, 22, false), (0.77, 0.41, 18, false), (0.31, 0.74, 26, false), (0.75, 0.88, 14, true), (0.54, 0.12, 16, false)],
+          ),
+        ),
+        const Positioned.fill(
+          child: PaintReveal(delay: Duration(milliseconds: 1400), duration: Duration(milliseconds: 350), curve: Cubic(0.8, 0, 0.2, 1), child: ColoredBox(color: inkBlack)),
+        ),
+      ]),
+    );
+    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      if (reduced)
+        sheet
+      else
+        AnimatedBuilder(
+          animation: _sway,
+          builder: (context, child) => Transform.rotate(angle: sin(_sway.value * 2 * pi) * 1.5 * pi / 180, child: child),
+          child: sheet,
+        ),
+      const SizedBox(height: 30),
+      Text(context.isEn ? 'Inking the covers…' : 'On encre les jaquettes…', style: Txt.h2(context).copyWith(fontSize: 26)),
+      const SizedBox(height: 4),
+      Text('${context.t('search.popular')} ${widget.sourceName}', style: Txt.caption(context).copyWith(fontSize: 14)),
+    ]);
+  }
+}
+
+/// A drop of ink lands on the slot, spreads, then wipes away to reveal the cover in colour.
+class _BlotReveal extends StatelessWidget {
+  const _BlotReveal({required this.child, required this.delay, this.red = false});
+  final Widget child;
+  final Duration delay;
+  final bool red;
+
+  @override
+  Widget build(BuildContext context) {
+    return OneShot(
+      delay: delay,
+      duration: const Duration(milliseconds: 600),
+      builder: (context, t, c) {
+        final grow = const Cubic(0.6, 0, 0.3, 1).transform((t / 0.42).clamp(0.0, 1.0));
+        final wipe = const Cubic(0.6, 0, 0.3, 1).transform(((t - 0.42) / 0.58).clamp(0.0, 1.0));
+        final color = Curves.easeOut.transform(((t - 0.41) / 0.59).clamp(0.0, 1.0));
+        return Stack(clipBehavior: Clip.none, children: [
+          Opacity(opacity: t > 0.41 ? 1 : 0, child: Colorized(t: color, child: c!)),
+          if (wipe < 1)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ClipRect(
+                  clipper: _WipeClip(wipe),
+                  child: Align(
+                    alignment: const Alignment(0, -0.35),
+                    child: Transform.rotate(
+                      angle: (1 - grow) * -30 * pi / 180,
+                      child: Transform.scale(scale: 0.01 + 2.3 * grow, child: InkBlot(width: 64, height: 58, color: red ? inkRed : inkBlack)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ]);
+      },
+      child: child,
+    );
+  }
+}
+
+class _WipeClip extends CustomClipper<Rect> {
+  _WipeClip(this.t);
+  final double t;
+
+  @override
+  Rect getClip(Size s) => Rect.fromLTRB(s.width * t, -200, s.width + 200, s.height + 200);
+
+  @override
+  bool shouldReclip(_WipeClip old) => old.t != t;
 }

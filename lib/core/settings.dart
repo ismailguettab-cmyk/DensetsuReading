@@ -25,7 +25,7 @@ class Settings extends ChangeNotifier {
   static const _key = 'settings.v1';
   final SharedPreferences _prefs;
 
-  ThemeMode themeMode = ThemeMode.dark;
+  ThemeMode themeMode = ThemeMode.light;
   String language = 'fr';
 
   ReadDirection direction = ReadDirection.rtl;

@@ -33,8 +33,8 @@ class SettingsPage extends StatelessWidget {
                       child: Segmented<ThemeMode>(
                         value: set.themeMode,
                         options: [
-                          (ThemeMode.dark, context.t('settings.dark')),
                           (ThemeMode.light, context.t('settings.light')),
+                          (ThemeMode.dark, context.t('settings.dark')),
                           (ThemeMode.system, context.t('settings.system')),
                         ],
                         onChanged: (v) => set.update((x) => x.themeMode = v),

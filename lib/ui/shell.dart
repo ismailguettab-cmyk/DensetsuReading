@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../core/l10n.dart';
 import '../core/motion.dart';
-import '../core/net.dart';
 import '../core/services.dart';
 import '../core/theme.dart';
 import 'home_page.dart';
@@ -14,18 +13,21 @@ import 'sources_page.dart';
 import 'widgets.dart';
 
 class _Tab {
-  const _Tab(this.key, this.icon, this.activeIcon);
+  const _Tab(this.key, this.kanji);
   final String key;
-  final IconData icon, activeIcon;
+
+  /// Kanji drawn above the label; null for Settings, which shows an icon at the bottom.
+  final String? kanji;
 }
 
 const _tabs = [
-  _Tab('nav.home', Icons.home_outlined, Icons.home_rounded),
-  _Tab('nav.reco', Icons.auto_awesome_outlined, Icons.auto_awesome_rounded),
-  _Tab('nav.search', Icons.search_rounded, Icons.manage_search_rounded),
-  _Tab('nav.sources', Icons.extension_outlined, Icons.extension_rounded),
-  _Tab('nav.settings', Icons.tune_rounded, Icons.tune_rounded),
+  _Tab('nav.home', '家'),
+  _Tab('nav.reco', '薦'),
+  _Tab('nav.search', '探'),
+  _Tab('nav.sources', '源'),
+  _Tab('nav.settings', null),
 ];
+const _settingsTab = 4;
 
 /// Lets a page switch tabs (e.g. "go install a source").
 class ShellScope extends InheritedWidget {
@@ -121,12 +123,7 @@ class _ShellState extends State<Shell> {
           body: wide
               ? Row(children: [
                   _Sidebar(index: _index, onSelect: _select),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(28)),
-                      child: ColoredBox(color: p.bg, child: content),
-                    ),
-                  ),
+                  Expanded(child: ColoredBox(color: p.bg, child: content)),
                 ])
               : Stack(children: [
                   Positioned.fill(child: content),
@@ -173,69 +170,37 @@ class _Sidebar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onSelect;
 
-  static const _itemHeight = 52.0;
-
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
     return Container(
-      width: 236,
-      color: p.sidebar,
+      width: 96,
+      decoration: BoxDecoration(color: p.sidebar, border: Border(right: BorderSide(color: p.text, width: 2))),
       child: SafeArea(
         right: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 30, 18, 22),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Padding(padding: EdgeInsets.only(left: 8), child: BrandMark()),
-            const SizedBox(height: 46),
-            SizedBox(
-              height: _itemHeight * _tabs.length,
-              child: Stack(children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 340),
-                  curve: Motion.easeOut,
-                  top: index * _itemHeight,
-                  left: 0,
-                  right: 0,
-                  height: _itemHeight - 6,
-                  child: DecoratedBox(decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(14))),
-                ),
-                Column(children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    SizedBox(
-                      height: _itemHeight,
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Pressable(
-                          onTap: () => onSelect(i),
-                          scale: 0.98,
-                          child: SizedBox(
-                            height: _itemHeight - 6,
-                            child: Row(children: [
-                              const SizedBox(width: 14),
-                              Icon(i == index ? _tabs[i].activeIcon : _tabs[i].icon, size: 21, color: i == index ? p.accent : p.text3),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: AnimatedDefaultTextStyle(
-                                  duration: Motion.fast,
-                                  style: Txt.label(context).copyWith(
-                                    fontSize: 14.5,
-                                    color: i == index ? p.text : p.text2,
-                                    fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
-                                  ),
-                                  child: Text(context.t(_tabs[i].key)),
-                                ),
-                              ),
-                            ]),
-                          ),
-                        ),
-                      ),
-                    ),
-                ]),
-              ]),
-            ),
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(children: [
+            const BrandMark(),
+            const SizedBox(height: 26),
+            for (var i = 0; i < _tabs.length; i++)
+              if (i != _settingsTab) _NavItem(tab: _tabs[i], active: i == index, onTap: () => onSelect(i)),
             const Spacer(),
-            const _ProfileChip(),
+            Tooltip(
+              message: context.t(_tabs[_settingsTab].key),
+              child: Pressable(
+                onTap: () => onSelect(_settingsTab),
+                scale: 0.94,
+                child: SizedBox(
+                  width: 64,
+                  height: 58,
+                  child: Stack(alignment: Alignment.center, children: [
+                    if (index == _settingsTab) InkBlot(width: 58, height: 52, dot: p.cta),
+                    Icon(Icons.tune_rounded, size: 22, color: index == _settingsTab ? p.bg : p.text2),
+                  ]),
+                ),
+              ),
+            ),
           ]),
         ),
       ),
@@ -243,62 +208,81 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
+/// A tab: its kanji over the label; the active one sits on an ink blot with a red drop.
+class _NavItem extends StatelessWidget {
+  const _NavItem({required this.tab, required this.active, required this.onTap, this.compact = false});
+
+  final _Tab tab;
+  final bool active, compact;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final fg = active ? p.bg : p.text2;
+    return Semantics(
+      selected: active,
+      button: true,
+      child: Pressable(
+        onTap: onTap,
+        scale: 0.94,
+        child: SizedBox(
+          width: compact ? 96 : 84,
+          height: compact ? 62 : 72,
+          child: Stack(alignment: Alignment.center, children: [
+            AnimatedOpacity(
+              opacity: active ? 1 : 0,
+              duration: Motion.fast,
+              child: InkBlot(width: compact ? 84 : 78, height: compact ? 58 : 66, dot: p.cta),
+            ),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(tab.kanji ?? '', style: Txt.kanji(context, size: compact ? 21 : 24).copyWith(color: active ? p.bg : p.text)),
+              const SizedBox(height: 5),
+              // Short labels only: the rail is narrow ("Recommandations" would wrap mid-word).
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  context.t(tab.key == 'nav.reco' ? 'nav.recoShort' : tab.key),
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: Txt.caption(context).copyWith(fontSize: 11, height: 1.1, color: fg, fontWeight: active ? FontWeight.w700 : FontWeight.w500),
+                ),
+              ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// The red seal with 伝, slightly tilted like a stamp.
 class BrandMark extends StatelessWidget {
-  const BrandMark({super.key, this.size = 1});
+  const BrandMark({super.key, this.size = 1, this.withName = false});
   final double size;
 
+  /// Adds "Densetsu" next to the seal (login screen).
+  final bool withName;
+
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        width: 34 * size,
-        height: 34 * size,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [p.accent, Color.lerp(p.accent, p.cta, 0.55)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(10 * size),
-        ),
+    final seal = Transform.rotate(
+      angle: -0.07,
+      child: Container(
+        width: 50 * size,
+        height: 50 * size,
+        decoration: BoxDecoration(color: p.cta, borderRadius: BorderRadius.circular(6 * size)),
         alignment: Alignment.center,
-        child: Text('伝', style: TextStyle(fontSize: 18 * size, fontWeight: FontWeight.w700, color: p.bg, height: 1)),
+        child: Text('伝', style: Txt.kanji(context, size: 26 * size).copyWith(color: p.onCta)),
       ),
-      SizedBox(width: 11 * size),
-      Text('Densetsu', style: Txt.h2(context).copyWith(fontSize: 21 * size, letterSpacing: -0.6)),
-    ]);
-  }
-}
-
-class _ProfileChip extends StatelessWidget {
-  const _ProfileChip();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    return ListenableBuilder(
-      listenable: Services.i.session,
-      builder: (context, _) {
-        final user = Services.i.session.user;
-        if (user == null) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(16)),
-          child: Row(children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: p.surface2,
-              backgroundImage: user.avatar == null ? null : NetworkImage(Net.image(user.avatar!)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(user.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.label(context)),
-                const SizedBox(height: 2),
-                Text('AniList', style: Txt.caption(context)),
-              ]),
-            ),
-          ]),
-        );
-      },
     );
+    if (!withName) return seal;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      seal,
+      SizedBox(width: 14 * size),
+      Text('Densetsu Reading', style: Txt.h2(context).copyWith(fontSize: 22 * size)),
+    ]);
   }
 }
 
@@ -313,34 +297,25 @@ class _BottomBar extends StatelessWidget {
     final p = context.pal;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+        constraints: const BoxConstraints(maxWidth: 640),
         child: Glass(
-          radius: 24,
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(children: [
             for (var i = 0; i < _tabs.length; i++)
-              Expanded(
-                child: Pressable(
-                  onTap: () => onSelect(i),
-                  scale: 0.94,
-                  child: AnimatedContainer(
-                    duration: Motion.base,
-                    curve: Motion.easeOut,
-                    height: 54,
-                    decoration: BoxDecoration(color: i == index ? p.accentSoft : null, borderRadius: BorderRadius.circular(18)),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(i == index ? _tabs[i].activeIcon : _tabs[i].icon, size: 21, color: i == index ? p.accent : p.text3),
-                      const SizedBox(height: 3),
-                      Text(
-                        context.t(_tabs[i].key),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Txt.caption(context).copyWith(fontSize: 10.5, color: i == index ? p.text : p.text3),
-                      ),
-                    ]),
-                  ),
-                ),
+              if (i != _settingsTab)
+                Expanded(child: Center(child: _NavItem(tab: _tabs[i], active: i == index, compact: true, onTap: () => onSelect(i)))),
+            Pressable(
+              onTap: () => onSelect(_settingsTab),
+              scale: 0.94,
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: Stack(alignment: Alignment.center, children: [
+                  if (index == _settingsTab) InkBlot(width: 52, height: 48, dot: p.cta),
+                  Icon(Icons.tune_rounded, size: 22, color: index == _settingsTab ? p.bg : p.text2),
+                ]),
               ),
+            ),
           ]),
         ),
       ),

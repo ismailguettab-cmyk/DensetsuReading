@@ -144,7 +144,7 @@ class _LoginPageState extends State<LoginPage> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 440),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Reveal(child: BrandMark(size: 1.15)),
+        const Reveal(child: BrandMark(size: 1.15, withName: true)),
         const SizedBox(height: 40),
         Reveal(index: 1, child: Text(context.t('login.title'), style: Txt.display(context))),
         const SizedBox(height: 16),

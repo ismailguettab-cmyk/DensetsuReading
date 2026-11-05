@@ -29,8 +29,12 @@ Dépôt : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`)
   pages Accueil, Recommandations, Recherche, Sources, Paramètres, fiche manga, lecteur.
 
 ## Décisions
-- Design maison, sobre (bleu nuit, accent pervenche, ambre pour l'action principale). Rien copié de TachiyomiSY
-  côté design : seulement les fonctions techniques.
+- DA « mode jour » (maquettes : canevas https://claude.ai/artifact/HRHK6btamwDs8rjdf9hFck) : crème #F2EBDD, papier #FBF8F1,
+  encre #121010, rouge sang #B5121B ; Noto Serif JP (titres) + Noto Sans JP ; formes carrées, bordures 2 px, ombres décalées.
+  Kit d’encre partagé dans `lib/ui/ink.dart` (coups de pinceau, ensō, tampon, balayage d’encre, portrait au pinceau).
+  Kanji seulement dans les onglets et sur les tampons. Mode nuit (lune / cerisier / bleu nuit) plus tard.
+  Écrans faits : Accueil, Bibliothèque, Recommandations (livres + double page manga), Recherche, fiche manga, Sources.
+  Restent : Paramètres, connexion, états vides, finitions portrait.
 - Recommandations : profil de goûts (genres, tags pondérés par statut, note, récence, recherches), signal
   collaboratif AniList, tirage pondéré ; un tirage est gardé 5 min puis renouvelé à chaque visite.
 - Lecteur : sens droite→gauche / gauche→droite / vertical, simple / double / auto, remplissage « Remplir l'écran »

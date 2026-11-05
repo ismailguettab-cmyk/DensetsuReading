@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../anilist/anilist.dart';
@@ -9,6 +11,7 @@ import '../core/theme.dart';
 import '../sources/catalog.dart';
 import '../sources/mangadex.dart';
 import '../sources/source.dart';
+import 'ink.dart';
 import 'reader_page.dart';
 import 'shell.dart';
 import 'widgets.dart';
@@ -287,7 +290,7 @@ class _MangaPageState extends State<MangaPage> {
         builder: (context, _) => LayoutBuilder(builder: (context, box) {
           final wide = box.maxWidth >= 860;
           final pad = pagePadding(context);
-          return CustomScrollView(slivers: [
+          final scroll = CustomScrollView(slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(pad.left, pad.top - 8, pad.right, 0),
               sliver: SliverToBoxAdapter(
@@ -296,13 +299,13 @@ class _MangaPageState extends State<MangaPage> {
                   const SizedBox(height: 24),
                   wide
                       ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          SizedBox(width: 264, child: _coverColumn(context)),
-                          const SizedBox(width: 44),
+                          SizedBox(width: 300, child: _coverColumn(context)),
+                          const SizedBox(width: 80),
                           Expanded(child: _info(context)),
                         ])
                       : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            SizedBox(width: 150, child: AspectRatio(aspectRatio: 2 / 3, child: _coverArt())),
+                            _coverArt(150),
                             const SizedBox(width: 20),
                             Expanded(child: _headline(context)),
                           ]),
@@ -319,28 +322,61 @@ class _MangaPageState extends State<MangaPage> {
             ..._chapterSlivers(context, pad),
             SliverToBoxAdapter(child: SizedBox(height: pad.bottom + 20)),
           ]);
+          if (!wide || _ani == null) return scroll;
+          // The main character, inked on a red sun in the top-right corner.
+          return Stack(children: [
+            Positioned(
+              right: 0,
+              top: 0,
+              width: 360,
+              height: 330,
+              child: IgnorePointer(child: FittedBox(fit: BoxFit.contain, alignment: Alignment.topRight, child: SizedBox(width: 430, height: 372, child: InkPortrait(mediaId: _ani!.id)))),
+            ),
+            scroll,
+          ]);
         }),
       ),
     );
   }
 
-  Widget _coverArt() => DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [BoxShadow(color: Color(0x4D000000), blurRadius: 30, offset: Offset(0, 16))],
+  /// Cover laid on brush strokes, with the score slammed on as a red seal.
+  Widget _coverArt(double width) {
+    final score = _ani?.meanScore;
+    return Stack(clipBehavior: Clip.none, children: [
+      BrushCover(
+        cover: _cover,
+        headers: (_ani?.cover == null ? _source?.imageHeaders : null) ?? const {},
+        title: _title,
+        width: width,
+      ),
+      if (score != null)
+        Positioned(
+          right: -14,
+          bottom: 18,
+          child: OneShot(
+            delay: const Duration(milliseconds: 700),
+            builder: (context, t, child) {
+              final a = (t / 0.6).clamp(0.0, 1.0), b = ((t - 0.6) / 0.4).clamp(0.0, 1.0);
+              final s = t < 0.6 ? 2.2 - 1.28 * a : 0.92 + 0.08 * b;
+              return Opacity(opacity: a, child: Transform.rotate(angle: (t < 0.6 ? -24 + 16 * a : -8 - 2 * b) * pi / 180, child: Transform.scale(scale: s, child: child)));
+            },
+            child: Container(
+              width: width * 0.3,
+              height: width * 0.3,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xE6F2EBDD), border: Border.all(color: inkRed, width: 4)),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(context.isEn ? 'SCORE' : 'NOTE', style: Txt.tag(context).copyWith(fontSize: 10, color: inkRed, letterSpacing: 1)),
+                Text((score / 10).toStringAsFixed(1).replaceAll('.', ','), style: Txt.number(context, size: width * 0.1).copyWith(color: inkRed)),
+              ]),
+            ),
+          ),
         ),
-        child: CoverImage(
-          url: _cover,
-          headers: (_ani?.cover == null ? _source?.imageHeaders : null) ?? const {},
-          radius: 16,
-          heroTag: widget.heroTag,
-          title: _title,
-        ),
-      );
+    ]);
+  }
 
-  Widget _coverColumn(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        AspectRatio(aspectRatio: 2 / 3, child: _coverArt()),
-        const SizedBox(height: 22),
+  Widget _coverColumn(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.only(left: 10), child: _coverArt(280)),
+        const SizedBox(height: 30),
         _actions(context),
       ]);
 
@@ -363,7 +399,7 @@ class _MangaPageState extends State<MangaPage> {
     ];
     final genres = (ani?.genres.isNotEmpty == true ? ani!.genres : _match?.genres ?? const <String>[]).take(6).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Reveal(child: Text(_title, style: Txt.h1(context).copyWith(fontSize: 30, letterSpacing: -0.7))),
+      Reveal(child: Padding(padding: const EdgeInsets.only(right: 260), child: Text(_title, style: Txt.display(context).copyWith(fontSize: 52)))),
       if (ani?.native != null && ani!.native != _title) ...[
         const SizedBox(height: 4),
         Text(ani.native!, style: Txt.caption(context).copyWith(fontSize: 14)),
@@ -388,7 +424,17 @@ class _MangaPageState extends State<MangaPage> {
       ],
       if (genres.isNotEmpty) ...[
         const SizedBox(height: 16),
-        Reveal(index: 2, child: Wrap(spacing: 8, runSpacing: 8, children: [for (final g in genres) Pill(g)])),
+        Reveal(
+          index: 2,
+          child: Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final (i, g) in genres.indexed)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: i == 0 ? inkBlack : Colors.transparent, border: Border.all(color: inkBlack, width: 2)),
+                child: Text(g, style: Txt.label(context).copyWith(fontSize: 12, color: i == 0 ? inkPaper : inkBlack)),
+              ),
+          ]),
+        ),
       ],
     ]);
   }
@@ -433,28 +479,48 @@ class _MangaPageState extends State<MangaPage> {
       if (progress > 0) resumeIndex = chapters.indexWhere((c) => (c.number ?? 0) > progress);
     }
     final canRead = chapters != null && chapters.isNotEmpty;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      AppButton(
-        expand: true,
-        icon: Icons.menu_book_rounded,
-        label: resumeIndex >= 0 && canRead
-            ? '${context.t('detail.continue')} · ${chapters[resumeIndex].name}'
-            : context.t('detail.read'),
-        loading: _loadingChapters,
+    final resuming = resumeIndex >= 0 && canRead;
+    final sub = resuming
+        ? '${chapters[resumeIndex].name}${last?.chapterUrl == chapters[resumeIndex].url ? ' · ${context.t('reader.page').toLowerCase()} ${last!.page + 1}' : ''}'
+        : (canRead ? chapters.first.name : (_loadingChapters ? context.t('detail.searching') : ''));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Pressable(
+        enabled: canRead,
         onTap: canRead
-            ? () => resumeIndex >= 0
+            ? () => resuming
                 ? _openReader(resumeIndex, page: last?.chapterUrl == chapters[resumeIndex].url ? last!.page : 0)
                 : _openReader(0)
             : null,
+        child: AnimatedOpacity(
+          duration: Motion.fast,
+          opacity: canRead ? 1 : 0.5,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const EnsoButton(size: 76, delay: Duration(milliseconds: 500)),
+            const SizedBox(width: 14),
+            Flexible(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(resuming ? context.t('detail.continue') : context.t('detail.read'), style: Txt.h2(context).copyWith(fontSize: 26, height: 1)),
+                const SizedBox(height: 3),
+                Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.label(context).copyWith(fontSize: 13, color: context.pal.text2)),
+              ]),
+            ),
+          ]),
+        ),
       ),
       if (ani != null && session.canWrite) ...[
-        const SizedBox(height: 10),
-        AppButton(
-          expand: true,
-          tone: ButtonTone.quiet,
-          icon: inList ? Icons.bookmark_added_rounded : Icons.bookmark_add_outlined,
-          label: inList ? context.t('detail.inPlan') : context.t('detail.addPlan'),
+        const SizedBox(height: 16),
+        Pressable(
           onTap: inList ? null : () => session.addToPlan(ani),
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(color: inList ? inkBlack : Colors.transparent, border: Border.all(color: inkBlack, width: 2)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(inList ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 18, color: inList ? inkPaper : inkBlack),
+              const SizedBox(width: 8),
+              Text(inList ? context.t('detail.inPlan') : context.t('detail.addPlan'), style: Txt.label(context).copyWith(color: inList ? inkPaper : inkBlack)),
+            ]),
+          ),
         ),
       ],
     ]);
@@ -541,20 +607,18 @@ class _MangaPageState extends State<MangaPage> {
             },
             child: AnimatedContainer(
               duration: Motion.fast,
-              padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: _source?.id == s.id ? p.accentSoft : p.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _source?.id == s.id ? p.accent : p.line, width: 1.2),
+                color: _source?.id == s.id ? inkBlack : Colors.transparent,
+                border: Border.all(color: inkBlack, width: 2),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                SourceLogo(s, size: 28),
-                const SizedBox(width: 8),
                 _AvailabilityDot(checked: _checked.contains(s.id), found: _availability[s.id] != null),
-                const SizedBox(width: 10),
-                Text(s.name, style: Txt.label(context)),
+                const SizedBox(width: 8),
+                Text(s.name, style: Txt.label(context).copyWith(color: _source?.id == s.id ? inkPaper : inkBlack)),
                 const SizedBox(width: 6),
-                Text(s.lang.toUpperCase(), style: Txt.caption(context)),
+                Text(s.lang.toUpperCase(), style: Txt.caption(context).copyWith(color: _source?.id == s.id ? const Color(0xFFCFC6B5) : null)),
               ]),
             ),
           ),
@@ -566,34 +630,55 @@ class _MangaPageState extends State<MangaPage> {
             child: Text('${context.t('detail.match')} ${_match!.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.caption(context)),
           ),
           const SizedBox(width: 10),
-          Pressable(onTap: _pickMatch, child: Text(context.t('detail.changeMatch'), style: Txt.caption(context).copyWith(color: p.accent, fontWeight: FontWeight.w700))),
+          Pressable(
+            onTap: _pickMatch,
+            child: Container(
+              padding: const EdgeInsets.only(bottom: 1),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkRed, width: 2))),
+              child: Text(context.t('detail.changeMatch'), style: Txt.caption(context).copyWith(color: inkBlack, fontWeight: FontWeight.w700)),
+            ),
+          ),
         ]),
     ]);
   }
 
   Widget _chaptersHeader(BuildContext context) {
     final count = _chapters?.length;
-    return Row(children: [
-      Text(context.t('detail.chapters'), style: Txt.h2(context)),
-      if (count != null) ...[const SizedBox(width: 10), Pill('$count')],
-      const Spacer(),
-      if (count != null && count > 0) ...[
-        SizedBox(
-          width: 220,
-          child: Segmented<bool>(
-            value: _volumes,
-            options: [(false, context.t('detail.chapters')), (true, context.t('detail.volumes'))],
-            onChanged: (v) => setState(() => _volumes = v),
+    Widget tab(String label, bool active, VoidCallback onTap) => Pressable(
+          onTap: onTap,
+          child: SizedBox(
+            height: 44,
+            child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+              if (active) const Positioned(left: -4, right: -4, bottom: 4, child: InkUnderline()),
+              Text(label, style: Txt.h2(context).copyWith(fontSize: 20, fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
+            ]),
           ),
-        ),
-        const SizedBox(width: 10),
-        IconCircle(
-          icon: _newestFirst ? Icons.south_rounded : Icons.north_rounded,
-          tooltip: _newestFirst ? context.t('detail.newest') : context.t('detail.oldest'),
-          onTap: () => setState(() => _newestFirst = !_newestFirst),
-        ),
-      ],
-    ]);
+        );
+    return Container(
+      padding: const EdgeInsets.only(bottom: 4),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkBlack, width: 2))),
+      child: Row(children: [
+        tab(context.t('detail.chapters'), !_volumes, () => setState(() => _volumes = false)),
+        const SizedBox(width: 20),
+        tab(context.t('detail.volumes'), _volumes, () => setState(() => _volumes = true)),
+        if (count != null) ...[const SizedBox(width: 14), Text('$count', style: Txt.label(context).copyWith(color: context.pal.text3))],
+        const Spacer(),
+        if (count != null && count > 0)
+          Pressable(
+            onTap: () => setState(() => _newestFirst = !_newestFirst),
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
+              child: Row(children: [
+                Icon(_newestFirst ? Icons.south_rounded : Icons.north_rounded, size: 16, color: inkBlack),
+                const SizedBox(width: 6),
+                Text(_newestFirst ? context.t('detail.newest') : context.t('detail.oldest'), style: Txt.label(context)),
+              ]),
+            ),
+          ),
+      ]),
+    );
   }
 
   List<Widget> _chapterSlivers(BuildContext context, EdgeInsets pad) {
@@ -687,15 +772,15 @@ class _ChapterRow extends StatelessWidget {
       if (chapter.date != null) context.ago(chapter.date!),
     ].join('  ·  ');
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.zero,
       child: Pressable(
         scale: 0.99,
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
-            color: current ? p.accentSoft : p.surface,
-            borderRadius: BorderRadius.circular(14),
+            color: current ? const Color(0xFFEAE2D1) : Colors.transparent,
+            border: const Border(bottom: BorderSide(color: Color(0x33121010))),
           ),
           child: Row(children: [
             Expanded(

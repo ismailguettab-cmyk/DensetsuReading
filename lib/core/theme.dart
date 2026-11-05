@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Colour tokens. Ink-night navy with a calm periwinkle accent; the warm amber
-/// is reserved for the one action that matters on a screen (read / continue).
+/// Colour tokens. Day mode is ink on cream paper with blood red kept for the one
+/// action that matters on a screen; night mode keeps the earlier navy until it is redesigned.
 @immutable
 class Palette extends ThemeExtension<Palette> {
   const Palette({
@@ -42,21 +42,22 @@ class Palette extends ThemeExtension<Palette> {
     danger: Color(0xFFFF7A7A),
   );
 
+  /// Day mode: cream paper, ink, blood red (see the style guide on the design canvas).
   static const light = Palette(
-    bg: Color(0xFFF6F5F1),
-    sidebar: Color(0xFFEEEDE7),
-    surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFEFEEE9),
-    line: Color(0x14131623),
-    text: Color(0xFF171A27),
-    text2: Color(0xFF5B6075),
-    text3: Color(0xFF8D91A3),
-    accent: Color(0xFF5E58D6),
-    accentSoft: Color(0x1F5E58D6),
-    cta: Color(0xFFE88A2E),
-    onCta: Color(0xFFFFFFFF),
-    star: Color(0xFFDE9F12),
-    danger: Color(0xFFD64545),
+    bg: Color(0xFFF2EBDD),
+    sidebar: Color(0xFFF2EBDD),
+    surface: Color(0xFFFBF8F1),
+    surface2: Color(0xFFEAE2D1),
+    line: Color(0x2E121010),
+    text: Color(0xFF121010),
+    text2: Color(0xFF3B3633),
+    text3: Color(0xFF5C554D),
+    accent: Color(0xFF121010),
+    accentSoft: Color(0x14121010),
+    cta: Color(0xFFB5121B),
+    onCta: Color(0xFFF2EBDD),
+    star: Color(0xFFB5121B),
+    danger: Color(0xFFB5121B),
   );
 
   @override
@@ -89,34 +90,56 @@ extension PaletteX on BuildContext {
   Palette get pal => Theme.of(this).extension<Palette>()!;
 }
 
-/// Type scale: tight negative tracking on large text, neutral on body, a hair
-/// positive on small captions. Numbers use tabular figures so counters don't jitter.
+/// Type scale: Noto Serif JP for titles and numbers (the "book" voice), Noto Sans JP
+/// for everything you read or tap. Numbers use tabular figures so counters don't jitter.
 class Txt {
   Txt._();
 
-  static TextStyle _base(Color c) => GoogleFonts.figtree(color: c);
+  static TextStyle _sans(Color c) => GoogleFonts.notoSansJp(color: c);
+  static TextStyle _serif(Color c) => GoogleFonts.notoSerifJp(color: c);
 
   static TextStyle display(BuildContext c) =>
-      _base(c.pal.text).copyWith(fontSize: 34, fontWeight: FontWeight.w700, height: 1.08, letterSpacing: -0.8);
+      _serif(c.pal.text).copyWith(fontSize: 48, fontWeight: FontWeight.w800, height: 1.0, letterSpacing: -1.0);
   static TextStyle h1(BuildContext c) =>
-      _base(c.pal.text).copyWith(fontSize: 26, fontWeight: FontWeight.w700, height: 1.15, letterSpacing: -0.5);
+      _serif(c.pal.text).copyWith(fontSize: 28, fontWeight: FontWeight.w800, height: 1.1, letterSpacing: -0.5);
   static TextStyle h2(BuildContext c) =>
-      _base(c.pal.text).copyWith(fontSize: 19, fontWeight: FontWeight.w700, height: 1.2, letterSpacing: -0.25);
+      _serif(c.pal.text).copyWith(fontSize: 22, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.2);
   static TextStyle title(BuildContext c) =>
-      _base(c.pal.text).copyWith(fontSize: 15, fontWeight: FontWeight.w600, height: 1.3, letterSpacing: -0.1);
+      _sans(c.pal.text).copyWith(fontSize: 15, fontWeight: FontWeight.w700, height: 1.3);
   static TextStyle body(BuildContext c) =>
-      _base(c.pal.text2).copyWith(fontSize: 14.5, fontWeight: FontWeight.w400, height: 1.6);
+      _sans(c.pal.text2).copyWith(fontSize: 15, fontWeight: FontWeight.w400, height: 1.6);
   static TextStyle label(BuildContext c) =>
-      _base(c.pal.text).copyWith(fontSize: 13.5, fontWeight: FontWeight.w600, height: 1.2);
+      _sans(c.pal.text).copyWith(fontSize: 14, fontWeight: FontWeight.w700, height: 1.2);
   static TextStyle caption(BuildContext c) =>
-      _base(c.pal.text3).copyWith(fontSize: 12.5, fontWeight: FontWeight.w500, height: 1.35, letterSpacing: 0.1);
-  static TextStyle number(BuildContext c, {double size = 28}) => _base(c.pal.text).copyWith(
+      _sans(c.pal.text3).copyWith(fontSize: 12.5, fontWeight: FontWeight.w500, height: 1.35);
+
+  /// Small black tag in capitals, e.g. "REPRENDRE LA LECTURE".
+  static TextStyle tag(BuildContext c) =>
+      _sans(c.pal.text).copyWith(fontSize: 12, fontWeight: FontWeight.w900, height: 1.2, letterSpacing: 2);
+
+  /// Kanji in the tabs and on stamps.
+  static TextStyle kanji(BuildContext c, {double size = 24}) =>
+      _serif(c.pal.text).copyWith(fontSize: size, fontWeight: FontWeight.w800, height: 1);
+
+  static TextStyle number(BuildContext c, {double size = 28}) => _serif(c.pal.text).copyWith(
         fontSize: size,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
         letterSpacing: -0.6,
         height: 1,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
+}
+
+/// Day-mode shape language: square corners, 2 px ink borders, offset ink shadows.
+class InkStyle {
+  InkStyle._();
+
+  static Border border(BuildContext c, {double width = 2}) => Border.all(color: c.pal.text, width: width);
+
+  static List<BoxShadow> shadow(BuildContext c, {double offset = 5}) =>
+      [BoxShadow(color: c.pal.text, offset: Offset(offset, offset))];
+
+  static bool isDay(BuildContext c) => Theme.of(c).brightness == Brightness.light;
 }
 
 ThemeData buildTheme(Palette p, Brightness brightness) {
@@ -130,23 +153,23 @@ ThemeData buildTheme(Palette p, Brightness brightness) {
   return base.copyWith(
     scaffoldBackgroundColor: p.bg,
     canvasColor: p.bg,
-    textTheme: GoogleFonts.figtreeTextTheme(base.textTheme).apply(bodyColor: p.text, displayColor: p.text),
+    textTheme: GoogleFonts.notoSansJpTextTheme(base.textTheme).apply(bodyColor: p.text, displayColor: p.text),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
     hoverColor: p.line,
     dividerColor: p.line,
     iconTheme: IconThemeData(color: p.text2, size: 22),
     tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(color: p.surface2, borderRadius: BorderRadius.circular(8)),
-      textStyle: TextStyle(color: p.text, fontSize: 12.5),
+      decoration: BoxDecoration(color: p.text),
+      textStyle: GoogleFonts.notoSansJp(color: p.bg, fontSize: 12.5, fontWeight: FontWeight.w700),
       waitDuration: const Duration(milliseconds: 500),
     ),
     sliderTheme: SliderThemeData(
-      activeTrackColor: p.accent,
-      inactiveTrackColor: p.surface2,
-      thumbColor: p.text,
+      activeTrackColor: p.text,
+      inactiveTrackColor: p.line,
+      thumbColor: p.cta,
       overlayShape: SliderComponentShape.noOverlay,
-      trackHeight: 3,
+      trackHeight: 4,
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? p.bg : p.text3),

@@ -1,8 +1,6 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../anilist/anilist.dart';
 import '../core/activity.dart';
@@ -12,12 +10,13 @@ import '../core/net.dart';
 import '../core/services.dart';
 import '../core/theme.dart';
 import '../sources/catalog.dart';
+import 'ink.dart';
 import 'library_page.dart';
 import 'manga_page.dart';
-import 'shell.dart';
 import 'widgets.dart';
 
-/// Profile: counts (each one opens its list), the manga to resume, what was read recently.
+/// Home (day mode): greeting, the manga to resume painted in with brush strokes,
+/// the main character inked on a red sun, then the three shelves of the library.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -38,586 +37,406 @@ class HomePage extends StatelessWidget {
                       title: context.t('login.error'),
                       action: AppButton(label: context.t('detail.retry'), tone: ButtonTone.quiet, onTap: session.refresh),
                     )
-                  : const CircularProgressIndicator(strokeWidth: 2),
+                  : const CircularProgressIndicator(strokeWidth: 2, color: inkBlack),
             );
           }
-          final read = session.withStatus(LibraryShelf.read.statuses);
-          final reading = session.withStatus(LibraryShelf.reading.statuses);
-          final planning = session.withStatus(LibraryShelf.planning.statuses);
-          final recent = session.withStatus({'COMPLETED', 'REPEATING'}).take(10).toList();
-          final resume = s.activity.reads.isEmpty ? null : s.activity.reads.first;
-          final pad = pagePadding(context);
-
-          void open(LibraryShelf shelf) => Navigator.of(context).push(SoftRoute(LibraryPage(initial: shelf)));
-
-          return RefreshIndicator(
-            onRefresh: session.refresh,
-            color: context.pal.accent,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _Hero(user: user),
+          final resume = _Resume.pick(context, s.activity.reads.firstOrNull, session.withStatus({'CURRENT'}).firstOrNull);
+          return LayoutBuilder(builder: (context, box) {
+            final wide = box.maxWidth >= 900;
+            final pad = wide ? 48.0 : 22.0;
+            return RefreshIndicator(
+              onRefresh: session.refresh,
+              color: inkRed,
+              child: ListView(padding: EdgeInsets.only(bottom: wide ? 36 : 120), children: [
+                _Header(user: user, resume: resume, wide: wide, pad: pad),
                 Padding(
-                  padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 0),
-                  child: _Stats(cards: [
-                    _StatData(context.t('home.read'), read.length, Icons.done_all_rounded, read, () => open(LibraryShelf.read)),
-                    _StatData(context.t('home.reading'), reading.length, Icons.auto_stories_rounded, reading, () => open(LibraryShelf.reading)),
-                    _StatData(context.t('home.planning'), planning.length, Icons.bookmark_rounded, planning, () => open(LibraryShelf.planning)),
-                  ]),
+                  padding: EdgeInsets.symmetric(horizontal: pad),
+                  child: const SizedBox(height: 18, child: BrushShape(Brush.divider)),
                 ),
-                if (resume != null) ...[
-                  const SizedBox(height: 44),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: pad.left),
-                    child: Reveal(index: 5, child: SectionTitle(context.t('home.continue'))),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: pad.left),
-                    child: Reveal(index: 6, offset: 24, child: _ResumeCard(event: resume)),
-                  ),
-                ],
-                const SizedBox(height: 44),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: pad.left),
-                  child: Reveal(index: 7, child: SectionTitle(context.t('home.recent'))),
+                  padding: EdgeInsets.fromLTRB(pad, 18, pad, 0),
+                  child: _Shelves(wide: wide),
                 ),
-                if (recent.isEmpty)
-                  Padding(padding: EdgeInsets.symmetric(horizontal: pad.left), child: Text(context.t('home.empty'), style: Txt.body(context)))
-                else
-                  _RecentRow(entries: recent, padding: pad.left),
-                SizedBox(height: pad.bottom),
-              ],
-            ),
-          );
+              ]),
+            );
+          });
         },
       ),
     );
   }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({required this.user});
+/// What "Reprendre" points at: the last chapter opened in the app, else the first manga in progress on AniList.
+class _Resume {
+  _Resume({required this.title, required this.cover, required this.headers, required this.sub, required this.line, this.page, this.total, this.anilistId, required this.open});
+
+  final String title;
+  final String? cover;
+  final Map<String, String> headers;
+  final String sub, line;
+  final int? page, total, anilistId;
+  final void Function(BuildContext) open;
+
+  static _Resume? pick(BuildContext context, ReadEvent? read, AniEntry? reading) {
+    if (read != null) {
+      final source = sourceById(read.sourceId);
+      return _Resume(
+        title: read.title,
+        cover: read.cover,
+        headers: source?.imageHeaders ?? const {},
+        sub: '${context.isEn ? 'Read' : 'Lu'} ${context.ago(read.at)}${source != null ? ' · ${source.name}' : ''}',
+        line: '${read.chapterName} · ${context.t('reader.page').toLowerCase()} ${read.page + 1}${read.total != null ? ' / ${read.total}' : ''}',
+        page: read.page + 1,
+        total: read.total,
+        anilistId: read.anilistId,
+        open: (context) => Navigator.of(context).push(SoftRoute(MangaPage.resume(read))),
+      );
+    }
+    if (reading != null) {
+      final m = reading.media;
+      return _Resume(
+        title: m.title,
+        cover: m.cover,
+        headers: const {},
+        sub: '${context.isEn ? 'Updated' : 'Mis à jour'} ${context.ago(reading.updated)} · AniList',
+        line: '${context.t('home.chapter')} ${reading.progress}${m.chapters != null ? ' / ${m.chapters}' : ''}',
+        page: reading.progress,
+        total: m.chapters,
+        anilistId: m.id,
+        open: (context) => Navigator.of(context).push(SoftRoute(MangaPage.anilist(m))),
+      );
+    }
+    return null;
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.user, required this.resume, required this.wide, required this.pad});
   final AniUser user;
+  final _Resume? resume;
+  final bool wide;
+  final double pad;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.pal;
-    final pad = pagePadding(context);
     final hour = DateTime.now().hour;
     final hello = context.t(hour >= 18 || hour < 5 ? 'home.evening' : 'home.hello');
-    return SizedBox(
-      height: 262,
-      child: Stack(fit: StackFit.expand, children: [
-        if (user.banner != null)
-          Reveal(
-            offset: 0,
-            child: Opacity(
-              opacity: 0.5,
-              child: Image.network(Net.image(user.banner!), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox()),
-            ),
-          ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [p.bg.withValues(alpha: user.banner == null ? 0 : 0.15), p.bg],
-            ),
+    final greeting = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: inkBlack, width: 2)),
+          child: ClipOval(
+            child: user.avatar == null ? const ColoredBox(color: Color(0xFFEAE2D1)) : Image.network(Net.image(user.avatar!), fit: BoxFit.cover),
           ),
         ),
-        Positioned(
-          left: pad.left,
-          right: pad.right,
-          bottom: 32,
-          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Reveal(
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: p.bg, shape: BoxShape.circle),
-                child: CircleAvatar(
-                  radius: 38,
-                  backgroundColor: p.surface2,
-                  backgroundImage: user.avatar == null ? null : NetworkImage(Net.image(user.avatar!)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Reveal(
-                index: 1,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('$hello, ${user.name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.display(context)),
-                  const SizedBox(height: 6),
-                  Text(context.t('home.subtitle'), style: Txt.body(context).copyWith(fontSize: 15)),
-                ]),
-              ),
-            ),
-          ]),
-        ),
+        const SizedBox(width: 12),
+        Flexible(child: Text(context.isEn ? 'Connected to AniList' : 'Connecté à AniList', style: Txt.label(context).copyWith(fontSize: 13, color: context.pal.text2))),
       ]),
-    );
-  }
-}
+      const SizedBox(height: 12),
+      Text('$hello, ${user.name}', style: Txt.display(context).copyWith(fontSize: 46)),
+      const SizedBox(height: 10),
+      Text(context.t('home.subtitle'), style: Txt.body(context)),
+    ]);
 
-class _StatData {
-  const _StatData(this.label, this.value, this.icon, this.entries, this.onTap);
-  final String label;
-  final int value;
-  final IconData icon;
-  final List<AniEntry> entries;
-  final VoidCallback? onTap;
-}
+    final resumeBlock = resume == null ? const SizedBox.shrink() : _ResumeBlock(resume: resume!, compact: !wide);
 
-class _Stats extends StatelessWidget {
-  const _Stats({required this.cards});
-  final List<_StatData> cards;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final columns = box.maxWidth >= 640 ? 3 : 1;
-      const gap = 16.0;
-      final w = (box.maxWidth - gap * (columns - 1)) / columns;
-      return Wrap(spacing: gap, runSpacing: gap, children: [
-        for (var i = 0; i < cards.length; i++)
-          SizedBox(width: w, height: 176, child: Reveal(index: 2 + i, offset: 22, child: _StatCard(data: cards[i], index: i))),
-      ]);
-    });
-  }
-}
-
-/// A count with a fan of the covers it stands for. The fan deals itself in once,
-/// then opens a little wider under the pointer; the card tilts toward it.
-class _StatCard extends StatefulWidget {
-  const _StatCard({required this.data, required this.index});
-  final _StatData data;
-  final int index;
-
-  @override
-  State<_StatCard> createState() => _StatCardState();
-}
-
-class _StatCardState extends State<_StatCard> with SingleTickerProviderStateMixin {
-  late final _deal = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-  bool _hover = false;
-  int _rolls = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 260 + widget.index * 90), () {
-      if (mounted) _deal.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _deal.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    final d = widget.data;
-    final covers = [for (final e in d.entries.take(3)) e.media.cover].reversed.toList();
-    final card = Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: p.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _hover && d.onTap != null ? p.accent.withValues(alpha: 0.45) : p.line),
-      ),
-      child: Stack(children: [
-        if (covers.isNotEmpty)
-          Positioned(right: -8, top: 16, width: 128, height: 150, child: _Fan(covers: covers, deal: _deal, open: _hover)),
+    if (!wide) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(pad, 28, pad, 22),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [greeting, const SizedBox(height: 26), resumeBlock]),
+      );
+    }
+    return SizedBox(
+      height: 372,
+      child: Stack(clipBehavior: Clip.hardEdge, children: [
+        if (resume?.anilistId != null) Positioned(right: 0, top: 0, width: 430, height: 372, child: InkPortrait(mediaId: resume!.anilistId!)),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(11)),
-              child: Icon(d.icon, size: 18, color: p.accent),
-            ),
-            const Spacer(),
-            RollingNumber(value: d.value, replay: _rolls, style: Txt.number(context, size: 34)),
-            const SizedBox(height: 6),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(d.label, style: Txt.caption(context).copyWith(fontSize: 13, color: p.text2)),
-              if (d.onTap != null) ...[
-                const SizedBox(width: 4),
-                AnimatedSlide(
-                  offset: Offset(_hover ? 0.25 : 0, 0),
-                  duration: Motion.fast,
-                  curve: Motion.easeOut,
-                  child: Icon(Icons.arrow_forward_rounded, size: 14, color: _hover ? p.accent : p.text3),
-                ),
-              ],
+          padding: EdgeInsets.fromLTRB(pad, 28, pad, 28),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            SizedBox(width: 250, child: greeting),
+            const SizedBox(width: 34),
+            Flexible(child: resumeBlock),
+            const SizedBox(width: 300),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ResumeBlock extends StatelessWidget {
+  const _ResumeBlock({required this.resume, required this.compact});
+  final _Resume resume;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = BrushCover(cover: resume.cover, headers: resume.headers, title: resume.title, width: compact ? 150 : 206);
+
+    final info = OneShot(
+      delay: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 400),
+      builder: (context, t, child) {
+        final e = const Cubic(0.2, 0.8, 0.2, 1).transform(t);
+        return Opacity(opacity: t, child: Transform.translate(offset: Offset(0, (1 - e) * 18), child: child));
+      },
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        InkTag(context.isEn ? 'CONTINUE READING' : 'REPRENDRE LA LECTURE'),
+        const SizedBox(height: 10),
+        Text(
+          resume.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Txt.display(context).copyWith(fontSize: compact ? 34 : 46, height: 0.98),
+        ),
+        const SizedBox(height: 8),
+        Text(resume.sub, style: Txt.body(context).copyWith(fontSize: 14)),
+        if (resume.total != null && resume.total! > 0) ...[
+          const SizedBox(height: 10),
+          _PageTicks(done: resume.page ?? 0, total: resume.total!),
+        ],
+        const SizedBox(height: 14),
+        Pressable(
+          onTap: () => resume.open(context),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const EnsoButton(),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(context.isEn ? 'Resume' : 'Reprendre', style: Txt.h2(context).copyWith(fontSize: 24, height: 1)),
+              const SizedBox(height: 3),
+              Text(resume.line, style: Txt.label(context).copyWith(fontSize: 12, color: context.pal.text2)),
             ]),
           ]),
         ),
       ]),
     );
-    if (d.onTap == null) return card;
-    return MouseRegion(
-      onEnter: (_) => setState(() {
-        _hover = true;
-        _rolls++;
-      }),
-      onExit: (_) => setState(() => _hover = false),
-      child: Tilt(maxAngle: 0.09, child: Pressable(onTap: d.onTap, child: card)),
+
+    return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Pressable(onTap: () => resume.open(context), child: cover),
+      SizedBox(width: compact ? 22 : 30),
+      Flexible(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 290), child: info)),
+    ]);
+  }
+}
+
+/// One tick per page (or chapter), filled up to the current one.
+class _PageTicks extends StatelessWidget {
+  const _PageTicks({required this.done, required this.total});
+  final int done, total;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = min(total, 40);
+    final filled = (done / total * n).round();
+    return SizedBox(
+      width: 220,
+      height: 6,
+      child: Row(children: [
+        for (var i = 0; i < n; i++) ...[
+          if (i > 0) const SizedBox(width: 2),
+          Expanded(child: ColoredBox(color: i < filled ? inkBlack : const Color(0x2E121010))),
+        ],
+      ]),
     );
   }
 }
 
-/// Three covers dealt like cards. Composite-only: rotation and translation.
-class _Fan extends StatelessWidget {
-  const _Fan({required this.covers, required this.deal, required this.open});
-  final List<String?> covers;
-  final AnimationController deal;
-  final bool open;
+class _Shelves extends StatelessWidget {
+  const _Shelves({required this.wide});
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
-    final n = covers.length;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: open ? 1 : 0),
-      duration: const Duration(milliseconds: 420),
-      curve: Motion.easeOut,
-      builder: (context, spread, _) => AnimatedBuilder(
-        animation: deal,
-        builder: (context, _) => Stack(clipBehavior: Clip.none, children: [
-          for (var i = 0; i < n; i++) _card(i, n, spread),
-        ]),
-      ),
-    );
+    final session = Services.i.session;
+    final shelves = [
+      for (final (i, shelf) in LibraryShelf.values.indexed) _Shelf(shelf: shelf, entries: session.withStatus(shelf.statuses), index: i),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(context.isEn ? 'Your library' : 'Ta bibliothèque', style: Txt.h2(context).copyWith(fontSize: 26)),
+      const SizedBox(height: 10),
+      if (wide)
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (var i = 0; i < shelves.length; i++) ...[
+            if (i > 0) const SizedBox(width: 34),
+            Expanded(child: shelves[i]),
+          ],
+        ])
+      else
+        Column(children: [for (final s in shelves) Padding(padding: const EdgeInsets.only(bottom: 26), child: s)]),
+    ]);
+  }
+}
+
+/// A shelf: count, label, "see all", then one cover face out and spines beside it.
+/// Books drop in once; hovering lifts them; a tap lifts the row and sweeps ink to the library.
+class _Shelf extends StatefulWidget {
+  const _Shelf({required this.shelf, required this.entries, required this.index});
+  final LibraryShelf shelf;
+  final List<AniEntry> entries;
+  final int index;
+
+  @override
+  State<_Shelf> createState() => _ShelfState();
+}
+
+class _ShelfState extends State<_Shelf> with SingleTickerProviderStateMixin {
+  bool _hover = false;
+  late final _lift = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+
+  @override
+  void dispose() {
+    _lift.dispose();
+    super.dispose();
   }
 
-  Widget _card(int i, int n, double spread) {
-    // Each card arrives a little after the previous one.
-    final start = i * 0.16;
-    final t = Curves.easeOutBack.transform(((deal.value - start) / (1 - start)).clamp(0.0, 1.0));
-    final slot = n == 1 ? 0.0 : (i / (n - 1)) * 2 - 1; // -1 … 1
-    final angle = (slot * (0.2 + 0.08 * spread)) * t;
-    final dx = slot * (22 + 16 * spread) * t;
-    final dy = (1 - t) * 90 - (spread * 8) * (1 - slot.abs());
-    return Positioned(
-      left: 36,
-      top: 6,
-      child: Opacity(
-        opacity: t.clamp(0.0, 1.0),
-        child: Transform(
-          alignment: Alignment.bottomCenter,
-          transform: Matrix4.identity()
-            ..translateByDouble(dx, dy, 0, 1)
-            ..rotateZ(angle),
-          child: SizedBox(
-            width: 56,
-            height: 84,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 14, offset: Offset(0, 6))],
-              ),
-              child: CoverImage(url: covers[i], radius: 8),
+  Future<void> _open() async {
+    if (_lift.isAnimating) return;
+    if (!Motion.reduced(context)) await _lift.forward(from: 0);
+    if (!mounted) return;
+    await Navigator.of(context).push(InkRoute(LibraryPage(initial: widget.shelf)));
+    _lift.value = 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = widget.entries;
+    final face = entries.firstOrNull;
+    final spines = entries.skip(1).take(6).toList();
+    final base = 700 + widget.index * 150;
+    const heights = [168.0, 152.0, 172.0, 158.0, 146.0, 166.0];
+    const widths = [28.0, 24.0, 30.0, 26.0, 24.0, 28.0];
+    const bands = [(inkPaper, inkBlack), (inkBlack, inkPaper), (inkRed, inkPaper)];
+
+    Widget drop(int i, Widget child) => OneShot(
+          delay: Duration(milliseconds: base + 50 * i),
+          builder: (context, t, c) => Opacity(
+            opacity: t.clamp(0.0, 1.0),
+            child: Transform.translate(offset: Offset(0, (1 - const Cubic(0.2, 1.2, 0.4, 1).transform(t)) * -30), child: c),
+          ),
+          child: child,
+        );
+
+    final row = Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      if (face != null)
+        drop(
+          0,
+          Padding(
+            padding: const EdgeInsets.only(right: 9),
+            child: SizedBox(
+              width: 112,
+              height: 164,
+              child: Stack(clipBehavior: Clip.none, children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: inkBlack, width: 2),
+                      boxShadow: const [BoxShadow(color: Color(0x59121010), offset: Offset(4, 0))],
+                    ),
+                    child: CoverImage(url: face.media.cover, radius: 0, title: face.media.title),
+                  ),
+                ),
+                if (widget.shelf == LibraryShelf.read)
+                  Positioned(right: -10, bottom: 8, child: HankoStamp(delay: const Duration(milliseconds: 1300))),
+                if (widget.shelf == LibraryShelf.reading)
+                  const Positioned(right: 14, top: -12, width: 18, height: 56, child: BrushShape(Brush.ribbon, color: inkRed)),
+                if (widget.shelf == LibraryShelf.planning)
+                  Positioned(left: -6, top: 12, child: InkTag(context.isEn ? 'TO READ' : 'À LIRE', angle: -4 * pi / 180)),
+              ]),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
+      for (var i = 0; i < spines.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(right: 3),
+          child: drop(i + 1, _Spine(entry: spines[i], width: widths[i], height: heights[i], band: bands[i % 3])),
+        ),
+    ]);
 
-
-class _ResumeCard extends StatelessWidget {
-  const _ResumeCard({required this.event});
-  final ReadEvent event;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    final source = sourceById(event.sourceId);
-    final headers = source?.imageHeaders ?? const <String, String>{};
-    return Pressable(
-      scale: 0.985,
-      onTap: source == null ? null : () => Navigator.of(context).push(SoftRoute(MangaPage.resume(event))),
-      child: Container(
-        height: 190,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: p.line)),
-        child: Stack(fit: StackFit.expand, children: [
-          // Static blurred cover as a backdrop: blurred once, never animated.
-          if (event.cover != null)
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-              child: Opacity(opacity: 0.45, child: CoverImage(url: event.cover, headers: headers, radius: 0)),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [p.surface.withValues(alpha: 0.35), p.surface.withValues(alpha: 0.92)], stops: const [0, 0.55]),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _open,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            RollingNumber(value: entries.length, style: Txt.number(context, size: 34)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(context.t(widget.shelf.label), style: Txt.label(context).copyWith(fontSize: 15))),
+            Text(context.isEn ? 'See all →' : 'Tout voir →', style: Txt.label(context).copyWith(fontSize: 13, color: inkRed)),
+          ]),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 176,
+            child: AnimatedBuilder(
+              animation: _lift,
+              builder: (context, child) {
+                // Hover: books rise a little. Tap: the row lifts, tilts, then holds while the ink comes.
+                final t = _lift.value;
+                final lift = t < 0.4 ? 22 * (t / 0.4) : 22 - 8 * ((t - 0.4) / 0.6);
+                final dy = t > 0 ? -lift : (_hover ? -6.0 : 0.0);
+                return AnimatedSlide(
+                  offset: Offset.zero,
+                  duration: Motion.fast,
+                  child: Transform.translate(
+                    offset: Offset(0, dy),
+                    child: Transform.rotate(angle: t > 0 && t < 0.6 ? -2 * pi / 180 * sin(t / 0.6 * pi) : 0, child: child),
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: entries.isEmpty
+                    ? Align(alignment: Alignment.bottomLeft, child: Text(context.isEn ? 'Empty shelf' : 'Étagère vide', style: Txt.caption(context)))
+                    : Align(alignment: Alignment.bottomLeft, child: ClipRect(child: row)),
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(children: [
-              SizedBox(
-                width: 104,
-                child: Tilt(
-                  maxAngle: 0.18,
-                  lift: 1.04,
-                  child: AspectRatio(
-                    aspectRatio: 2 / 3,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 22, offset: Offset(0, 12))],
-                      ),
-                      child: CoverImage(url: event.cover, headers: headers, radius: 12, title: event.title),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 26),
-              Expanded(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(context.ago(event.at), style: Txt.caption(context).copyWith(color: p.accent, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text(event.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Txt.h1(context).copyWith(fontSize: 24)),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${event.chapterName}  ·  ${context.t('reader.page')} ${event.page + 1}  ·  ${source?.name ?? ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Txt.caption(context).copyWith(fontSize: 13, color: p.text2),
-                  ),
-                ]),
-              ),
-              const SizedBox(width: 16),
-              const _PlayButton(),
-            ]),
-          ),
+          const SizedBox(height: 16, child: BrushShape(Brush.plank)),
         ]),
       ),
     );
   }
 }
 
-/// Play button that settles in with a single soft overshoot when it appears.
-class _PlayButton extends StatelessWidget {
-  const _PlayButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    final button = Container(
-      width: 58,
-      height: 58,
-      decoration: BoxDecoration(
-        color: p.cta,
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: p.cta.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8))],
-      ),
-      child: Icon(Icons.play_arrow_rounded, size: 30, color: p.onCta),
-    );
-    if (Motion.reduced(context)) return button;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.6, end: 1),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.elasticOut,
-      builder: (_, s, child) => Transform.scale(scale: s, child: child),
-      child: button,
-    );
-  }
-}
-
-class _RecentRow extends StatelessWidget {
-  const _RecentRow({required this.entries, required this.padding});
-  final List<AniEntry> entries;
-  final double padding;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 318,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        padding: EdgeInsets.symmetric(horizontal: padding),
-        itemCount: entries.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 20),
-        itemBuilder: (context, i) => _SlideIn(index: i, child: _RecentCard(entry: entries[i], index: i)),
-      ),
-    );
-  }
-}
-
-/// Slides in from the right, staggered, once.
-class _SlideIn extends StatefulWidget {
-  const _SlideIn({required this.index, required this.child});
-  final int index;
-  final Widget child;
-
-  @override
-  State<_SlideIn> createState() => _SlideInState();
-}
-
-class _SlideInState extends State<_SlideIn> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 620));
-  late final _t = CurvedAnimation(parent: _c, curve: Motion.easeOut);
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 420 + 70 * min(widget.index, 8)), () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final reduced = Motion.reduced(context);
-    return FadeTransition(
-      opacity: _t,
-      child: reduced
-          ? widget.child
-          : AnimatedBuilder(
-              animation: _t,
-              builder: (_, child) => Transform.translate(offset: Offset((1 - _t.value) * 60, 0), child: child),
-              child: widget.child,
-            ),
-    );
-  }
-}
-
-/// Red hanko-style "finished" seal: 読了 (finished reading) dominant, "Terminé" small.
-/// It is struck onto the cover once: drops from above, slightly too big and turned,
-/// lands with a short squash, and leaves a faint ink ring that fades.
-class _Stamp extends StatefulWidget {
-  const _Stamp({required this.delay});
-  final Duration delay;
-
-  @override
-  State<_Stamp> createState() => _StampState();
-}
-
-class _StampState extends State<_Stamp> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 620));
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(widget.delay, () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  static const _red = Color(0xFFD93A2B);
-
-  @override
-  Widget build(BuildContext context) {
-    final seal = Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: const Color(0xE6FFF7F0), // paper, so the red ink reads on any cover
-        border: Border.all(color: _red.withValues(alpha: 0.92), width: 3),
-        boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 8, offset: Offset(0, 3))],
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Container(
-        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _red.withValues(alpha: 0.85), width: 1.2)),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('読了', style: GoogleFonts.notoSerifJp(fontSize: 22, height: 1, fontWeight: FontWeight.w900, color: _red)),
-          const SizedBox(height: 2),
-          Text(
-            context.isEn ? 'FINISHED' : 'TERMINÉ',
-            style: TextStyle(fontSize: 7.5, height: 1, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: _red.withValues(alpha: 0.95)),
-          ),
-        ]),
-      ),
-    );
-    if (Motion.reduced(context)) return Transform.rotate(angle: -0.21, child: seal);
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, child) {
-        final v = _c.value;
-        // 0–0.45: falls onto the page (accelerating, like a hand pressing); 0.45–1: squash and settle.
-        final fall = Curves.easeInCubic.transform((v / 0.45).clamp(0.0, 1.0));
-        final settle = ((v - 0.45) / 0.55).clamp(0.0, 1.0);
-        final squash = 1 - 0.08 * sin(settle * pi) * (1 - settle);
-        final scale = (1.9 - 0.9 * fall) * squash;
-        final angle = -0.55 + 0.34 * fall;
-        final ring = settle > 0 ? (1 - settle) : 0.0;
-        return Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-          if (ring > 0)
-            Transform.scale(
-              scale: 1 + 0.5 * settle,
-              child: Opacity(
-                opacity: ring * 0.5,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _red, width: 2)),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-          Opacity(
-            opacity: fall.clamp(0.0, 1.0),
-            child: Transform.rotate(angle: angle, child: Transform.scale(scale: scale, child: child)),
-          ),
-        ]);
-      },
-      child: seal,
-    );
-  }
-}
-
-class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.entry, required this.index});
+/// A book seen from its spine: the cover cropped to a strip, with a title band.
+class _Spine extends StatelessWidget {
+  const _Spine({required this.entry, required this.width, required this.height, required this.band});
   final AniEntry entry;
-  final int index;
+  final double width, height;
+  final (Color, Color) band;
 
   @override
   Widget build(BuildContext context) {
-    final m = entry.media;
-    final tag = 'recent-${m.id}';
-    return Pressable(
-      onTap: () => Navigator.of(context).push(SoftRoute(MangaPage.anilist(m, heroTag: tag))),
-      child: SizedBox(
-        width: 168,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Tilt(
-            child: AspectRatio(
-              aspectRatio: 2 / 3,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 20, offset: Offset(0, 10))],
-                ),
-                child: Stack(fit: StackFit.expand, children: [
-                  CoverImage(url: m.cover, radius: 14, heroTag: tag, title: m.title),
-                  Positioned(right: 6, bottom: 8, width: 78, height: 78, child: _Stamp(delay: Duration(milliseconds: 700 + 90 * index))),
-                ]),
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
+      child: Stack(fit: StackFit.expand, children: [
+        if (entry.media.cover != null)
+          Image.network(Net.image(entry.media.cover!), fit: BoxFit.cover, alignment: const Alignment(-0.76, 0), errorBuilder: (_, _, _) => const SizedBox()),
+        Center(
+          child: Container(
+            width: 16,
+            margin: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(color: band.$1, border: Border.all(color: inkBlack, width: 1.5)),
+            child: RotatedBox(
+              quarterTurns: 1,
+              child: Text(
+                entry.media.title.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                textAlign: TextAlign.center,
+                style: Txt.tag(context).copyWith(fontSize: 9, letterSpacing: 1, color: band.$2, height: 1.3),
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Txt.title(context).copyWith(fontSize: 14)),
-          const SizedBox(height: 4),
-          Text(context.ago(entry.updated), style: Txt.caption(context)),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 }
+
