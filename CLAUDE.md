@@ -1,5 +1,7 @@
 # Densetsu Reading
 
+
+> Reprise : lire d’abord `SAUVEGARDE.md` (synthèse de tout le projet, maquettes Claude Design comprises).
 Application de lecture de mangas, pensée tablette en paysage (portrait fonctionnel). Répondre en français.
 Dépôt : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`).
 
