@@ -631,9 +631,20 @@ class _MangaPageState extends State<MangaPage> {
         AppButton(label: context.t('nav.sources'), tone: ButtonTone.accent, onTap: () => ShellScope.of(context).select(3)),
       ]);
     }
+    // One row per language (French first), each under its own small heading.
+    final langs = [for (final l in const ['fr', 'en', 'ja']) if (installed.any((s) => s.lang == l)) l, ...{for (final s in installed) if (!const ['fr', 'en', 'ja'].contains(s.lang)) s.lang}];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final lang in langs) ...[
+      Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 8),
+        child: Row(children: [
+          Text(languageName(lang, context.isEn).toUpperCase(), style: Txt.tag(context).copyWith(fontSize: 11, letterSpacing: 1.5)),
+          const SizedBox(width: 10),
+          const Expanded(child: SizedBox(height: 2, child: ColoredBox(color: Color(0x33121010)))),
+        ]),
+      ),
       Wrap(spacing: 10, runSpacing: 10, children: [
-        for (final s in installed)
+        for (final s in installed.where((s) => s.lang == lang))
           Pressable(
             onTap: () {
               if (_source?.id == s.id) return;
@@ -652,13 +663,12 @@ class _MangaPageState extends State<MangaPage> {
                 _AvailabilityDot(checked: _checked.contains(s.id), found: _availability[s.id] != null),
                 const SizedBox(width: 8),
                 Text(s.name, style: Txt.label(context).copyWith(color: _source?.id == s.id ? inkPaper : inkBlack)),
-                const SizedBox(width: 6),
-                Text(s.lang.toUpperCase(), style: Txt.caption(context).copyWith(color: _source?.id == s.id ? const Color(0xFFCFC6B5) : null)),
               ]),
             ),
           ),
       ]),
-      const SizedBox(height: 12),
+      const SizedBox(height: 14),
+      ],
       if (_match != null && widget.seed?.url != _match!.url)
         Row(children: [
           Flexible(
