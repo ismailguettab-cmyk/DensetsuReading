@@ -3,51 +3,61 @@
 
 > Reprise : lire d’abord `SAUVEGARDE.md` (synthèse de tout le projet, maquettes Claude Design comprises).
 Application de lecture de mangas, pensée tablette en paysage (portrait fonctionnel). Répondre en français.
-Dépôt : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`).
+Dépôt **public** : https://github.com/ismailguettab-cmyk/DensetsuReading (branche `main`).
 
 ## Environnement
-- PC pro Windows **sans droits admin** : Flutter installé en portable dans `%LOCALAPPDATA%\Programs\flutter`
-  (`flutter.bat`), Node dans `%LOCALAPPDATA%\Programs\node`. Ne jamais proposer d'installation admin.
-- Commits **sans ligne Co-Authored-By** ; identité Git `ismailguettab-cmyk` / `344953067+ismailguettab-cmyk@users.noreply.github.com`.
-- L'utilisateur débute : expliquer simplement, montrer l'avancement dans l'aperçu.
+- PC perso Windows **sans Flutter ni Java ni SDK Android** (l’utilisateur préfère ne rien installer) : tout se compile
+  sur **GitHub Actions** (`.github/workflows/apk.yml`). Ne jamais proposer d'installation admin. Node est disponible.
+  (Ancien PC pro : Flutter portable dans `%LOCALAPPDATA%\Programs\flutter`, aperçu web via `tool/dev_server.mjs`.)
+- **Pousser directement sur `main`** (pas de branche intermédiaire : chaque build prend ~7 min).
+  Chaque push = `flutter analyze --no-fatal-infos` (erreurs ET avertissements bloquent) + APK signé + release `apk-latest`.
+  Lien fixe : https://github.com/ismailguettab-cmyk/DensetsuReading/releases/download/apk-latest/DensetsuReading.apk
+- Commits **sans ligne Co-Authored-By** ; identité Git (config du dépôt) `ismailguettab-cmyk` / `344953067+ismailguettab-cmyk@users.noreply.github.com`.
+- Fichiers en CRLF : préférer l’outil Edit aux scripts `node -e` (les apostrophes cassent le shell).
+- L'utilisateur débute : expliquer simplement.
 
-## Aperçu
-- `flutter build web --release --no-tree-shake-icons` puis `node tool/dev_server.mjs` (port 5173).
-- Le serveur sert `build/web` et relaie les sites de mangas via `/proxy?url=…&referer=…` (CORS, Referer).
-  Sur tablette ce relais est inutile : `lib/core/net.dart` appelle directement.
-- `google_fonts` est figé en ^8 : la v9 dépend de `material_ui` et casse avec Flutter 3.47.
+## Build et signature
+- APK signé avec une **clé fixe** (sinon Android refuse la mise à jour : « package en conflit »).
+  Clé PKCS12 hors dépôt : `C:\Users\ismai\DensetsuReading-signature\` (`release.p12`, `password.txt`, alias `densetsu`).
+  Secrets GitHub : `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` ; lus par `android/app/build.gradle.kts`.
+- `--build-number=${{ github.run_number }}` et `--dart-define=BUILD_SHA=${{ github.sha }}` (version comparée par la mise à jour intégrée).
+- `google_fonts` figé en 8.0.0 (la v9 casse). Plugins natifs : `flutter_web_auth_2` (connexion AniList), `open_filex` + `path_provider` (mise à jour).
 
 ## Architecture (`lib/`)
-- `core/` : réglages (`settings.dart`), thème et typo (`theme.dart`, classe `Txt`), animations (`motion.dart` :
-  `Pressable`, `Reveal`, `CountUp`, ressorts façon Apple), textes FR/EN (`l10n.dart`, `context.t('clé')`).
-- `anilist/` : API GraphQL (limite 30 req/min → requêtes groupées par alias), session (jeton OAuth ou pseudo
-  public en lecture seule), recommandeur.
-- `sources/` : contrat inspiré de TachiyomiSY (`MangaSource` : popular, search + filtres, details, chapters, pages).
-  Moteurs communs `Madara` et `MangaThemesia` + classes par site (`fr_sites.dart`, `en_sites.dart`, `ja_sites.dart`).
-  Langues : FR, EN, JA uniquement. Pages avec adresse de secours (MangaDex : uploads.mangadex.org) et nouvel essai auto.
-- `translate/` : traduction des bulles avec Google Gemini **gratuit** (clé aistudio.google.com, Flash puis Flash-Lite,
-  requêtes en file espacées). Pas d’option payante (demande de l’utilisateur). On efface seulement le texte d’origine.
-- `ui/` : shell (barre latérale en paysage, barre flottante en portrait, une pile de navigation par onglet),
-  pages Accueil, Recommandations, Recherche, Sources, Paramètres, fiche manga, lecteur.
+- `core/` : réglages (`settings.dart`, dont jeton GitHub facultatif), thème (`theme.dart`, `Txt`), animations (`motion.dart`),
+  textes FR/EN (`l10n.dart`), `activity.dart` (recherches, lectures, marques de chapitres effacées),
+  `platform*.dart` (connexion AniList : Android = `flutter_web_auth_2` + `densetsureading://auth`, web = redirection),
+  `updater*.dart` (mise à jour depuis la release GitHub, uniquement Android).
+- `anilist/` : API GraphQL (30 req/min → alias groupés ; `browse()` = recherche catalogue avec filtres), session
+  (OAuth ou pseudo en lecture seule ; `markCompleted`, `addToPlan`), recommandeur.
+- `sources/` : contrat inspiré de TachiyomiSY ; moteurs `Madara` / `MangaThemesia` + sites FR/EN/JA.
+- `translate/` : bulles traduites avec Gemini **gratuit** (jamais testé avec une vraie clé).
+- `ui/` : shell (une pile de navigation par onglet ; chaque retour sur un onglet reconstruit sa page pour rejouer
+  les animations), `login_page` (planches de manga + carte AniList), `home_page`, `reco_page` (rayons) + `reco_book`
+  (livre ouvert en double page manga) + `reco_symbols.dart` (silhouettes générées depuis la maquette Reco),
+  `anilist_search_page` (onglet Recherche), `search_page` (parcourir une source, ouvert depuis Sources), `manga_page`,
+  `reader_page`, `settings_page` (section Application = mise à jour), `ink.dart` (kit d’encre : `OneShot`, `PaintReveal`,
+  `HankoStamp`, `InkRoute`, `InkSweepPainter`, `InkReload`, `InkStretchTag`…).
 
 ## Décisions
-- DA « mode jour » (maquettes : canevas https://claude.ai/artifact/HRHK6btamwDs8rjdf9hFck) : crème #F2EBDD, papier #FBF8F1,
-  encre #121010, rouge sang #B5121B ; Noto Serif JP (titres) + Noto Sans JP ; formes carrées, bordures 2 px, ombres décalées.
-  Kit d’encre partagé dans `lib/ui/ink.dart` (coups de pinceau, ensō, tampon, balayage d’encre, portrait au pinceau).
-  Kanji seulement dans les onglets et sur les tampons. Mode nuit (lune / cerisier / bleu nuit) plus tard.
-  Écrans faits : Accueil, Bibliothèque, Recommandations (livres + double page manga), Recherche, fiche manga, Sources.
-  Restent : Paramètres, connexion, états vides, finitions portrait.
-- Recommandations : profil de goûts (genres, tags pondérés par statut, note, récence, recherches), signal
-  collaboratif AniList, tirage pondéré ; un tirage est gardé 5 min puis renouvelé à chaque visite.
-- Lecteur : sens droite→gauche / gauche→droite / vertical, simple / double / auto, remplissage « Remplir l'écran »
-  (sans bordure ni déformation, le surplus défile), pages larges affichées seules, décalage et inversion des doubles.
-- Traduction : garde noms, honorifiques et techniques en japonais ; police Comic Neue (la police d'origine ne peut
-  pas être reconnue), taille plafonnée à celle d'origine, texte ajusté pour ne jamais dépasser la bulle.
-- Sources testées et écartées : CrunchyScan (redirige vers un site douteux), Epsilon Scan (Cloudflare),
-  Lelscan / Inovascan / Phenix Scans (hors ligne), sushiscan.fr (504). Scantrad Union possible plus tard (thème maison).
+- DA « mode jour » (canevas https://claude.ai/artifact/HRHK6btamwDs8rjdf9hFck) : crème #F2EBDD, papier #FBF8F1,
+  encre #121010, rouge sang #B5121B ; Noto Serif JP + Noto Sans JP ; formes carrées, bordures 2 px, ombres décalées.
+  Kanji seulement dans les onglets et sur les tampons. Animations : transformations et opacité uniquement.
+- AniList : client **55950** (redirection `densetsureading://auth`) codé dans `AniList.appClientId`.
+  Client web pas encore créé (`webClientId` vide).
+- Recommandations : goûts d’abord (profil par catégorie, tags pondérés), pas de bonus note/popularité, tout le catalogue
+  (tris et pages aléatoires, `lastPage` appris), anti-répétition sur 12 tirages, 24 titres par catégorie, cache disque
+  affiché tout de suite, préparées au lancement. Recharger tout ou une catégorie (coups d’encre).
+- Recherche = catalogue AniList (filtres statut, catégories, public, note, publication, origine, format, tri) ;
+  la source se choisit seulement dans la fiche.
+- Fiche : correspondance source stricte (≥ 0,75, identifiant AniList prioritaire) ; sources groupées par langue ;
+  chapitres lus barrés d’un trait de pinceau ; bouton Effacer ; « Marquer comme terminé ».
+- Lecteur : double page + « Remplir l'écran » = plein écran sans défilement (étirement ≤ 12 % puis rognage haut/bas).
+- Sources écartées : CrunchyScan, Epsilon/Astral/MangaKawaii (Cloudflare), MangaHub, Raw1001, comix.to (API à jeton
+  anti-robots), sites hors ligne.
 
 ## À faire
-- Connexion AniList OAuth : l'utilisateur doit créer un client sur anilist.co (redirection `http://localhost:5173/auth`).
-- Clé Gemini gratuite à saisir dans Paramètres pour tester la traduction (pas encore testée).
-- APK via GitHub Actions (prochaine session).
-- Version tablette Android / iPad (SDK Android ou Mac requis), sources anglaises de everythingmoe.com.
+- Tester la traduction Gemini avec une vraie clé.
+- Version web en ligne (GitHub Pages possible, dépôt public) : 2e client AniList + relais pour les sources.
+- Mode jour restant : écran Paramètres au style encre, états vides, finitions portrait. Mode nuit plus tard.
+- Accélérer le build (cache Gradle, APK arm64 seul) si l’attente gêne.
