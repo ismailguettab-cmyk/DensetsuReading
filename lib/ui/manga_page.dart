@@ -93,10 +93,6 @@ class _MangaPageState extends State<MangaPage> {
     }
   }
 
-  void _autoTranslate() {
-    if (_summaryFr == null && _summaryEn != null && !context.isEn && Services.i.translator.ready) _translateSummary();
-  }
-
   Future<void> _translateSummary() async {
     final en = _summaryEn;
     if (en == null) return;
@@ -609,7 +605,6 @@ class _MangaPageState extends State<MangaPage> {
   }
 
   Widget _sourcePicker(BuildContext context) {
-    final p = context.pal;
     final installed = Services.i.sources.installed;
     if (installed.isEmpty) {
       return Row(children: [
