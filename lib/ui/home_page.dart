@@ -57,6 +57,7 @@ class HomePage extends StatelessWidget {
                   padding: EdgeInsets.fromLTRB(pad, 18, pad, 0),
                   child: _Shelves(wide: wide),
                 ),
+                _RecentReads(pad: pad),
               ]),
             );
           });
@@ -402,6 +403,92 @@ class _ShelfState extends State<_Shelf> with SingleTickerProviderStateMixin {
   }
 }
 
+/// The five manga touched last (AniList list, newest first), finished ones sealed with 読了.
+class _RecentReads extends StatelessWidget {
+  const _RecentReads({required this.pad});
+  final double pad;
+
+  static const _shown = {'CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED'};
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = Services.i.session.entries.where((e) => _shown.contains(e.status)).take(5).toList();
+    if (recent.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 34),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: pad),
+          child: Text(context.isEn ? 'Read recently' : 'Lus récemment', style: Txt.h2(context).copyWith(fontSize: 26)),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 262,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: pad),
+            itemCount: recent.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 26),
+            itemBuilder: (context, i) => _RecentCard(entry: recent[i], index: i),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RecentCard extends StatelessWidget {
+  const _RecentCard({required this.entry, required this.index});
+  final AniEntry entry;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = entry.media;
+    final done = entry.status == 'COMPLETED' || entry.status == 'REPEATING';
+    final sub = done
+        ? (context.isEn ? 'Finished' : 'Terminé')
+        : '${context.t('home.chapter')} ${entry.progress}${m.chapters != null ? ' / ${m.chapters}' : ''}';
+    final tag = 'recent-${m.id}';
+    return SizedBox(
+      width: 140,
+      child: Pressable(
+        onTap: () => Navigator.of(context).push(SoftRoute(MangaPage.anilist(m, heroTag: tag))),
+        child: OneShot(
+          delay: Duration(milliseconds: 900 + 70 * index),
+          duration: const Duration(milliseconds: 420),
+          builder: (context, t, child) => Opacity(
+            opacity: t.clamp(0.0, 1.0),
+            child: Transform.translate(offset: Offset(0, (1 - const Cubic(0.2, 1.2, 0.4, 1).transform(t)) * -26), child: child),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(
+              width: 140,
+              height: 200,
+              child: Stack(clipBehavior: Clip.none, children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(boxShadow: [BoxShadow(color: inkBlack, offset: Offset(5, 5))]),
+                    foregroundDecoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
+                    child: CoverImage(url: m.cover, radius: 0, title: m.title, heroTag: tag),
+                  ),
+                ),
+                if (done) Positioned(right: -10, bottom: -8, child: HankoStamp(size: 50, delay: Duration(milliseconds: 1250 + 90 * index))),
+                if (entry.status == 'CURRENT')
+                  const Positioned(right: 14, top: -10, width: 16, height: 50, child: BrushShape(Brush.ribbon, color: inkRed)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            Text(m.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.label(context).copyWith(fontSize: 14)),
+            const SizedBox(height: 2),
+            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.caption(context).copyWith(fontSize: 12)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// A book seen from its spine: the cover cropped to a strip, with a title band.
 class _Spine extends StatelessWidget {
   const _Spine({required this.entry, required this.width, required this.height, required this.band});
@@ -417,7 +504,7 @@ class _Spine extends StatelessWidget {
       decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
       child: Stack(fit: StackFit.expand, children: [
         if (entry.media.cover != null)
-          Image.network(Net.image(entry.media.cover!), fit: BoxFit.cover, alignment: const Alignment(-0.76, 0), errorBuilder: (_, _, _) => const SizedBox()),
+          Image.network(Net.image(entry.media.cover!), fit: BoxFit.cover, cacheHeight: (height * MediaQuery.devicePixelRatioOf(context)).round(), alignment: const Alignment(-0.76, 0), errorBuilder: (_, _, _) => const SizedBox()),
         Center(
           child: Container(
             width: 16,

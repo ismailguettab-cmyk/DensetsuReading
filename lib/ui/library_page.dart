@@ -34,6 +34,9 @@ class _LibraryPageState extends State<LibraryPage> {
   late LibraryShelf _shelf = widget.initial;
   String _sort = 'recent';
   bool _opened = false; // first grid waits for the ink to clear, later ones play at once
+  // Only the covers on screen when the grid appears are animated; the ones reached by
+  // scrolling show up at once (they used to wait their turn, which felt like lag).
+  DateTime _gridShown = DateTime.now();
 
   List<AniEntry> _sorted(List<AniEntry> entries) {
     final list = [...entries];
@@ -53,6 +56,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void _set(VoidCallback change) => setState(() {
         change();
         _opened = true;
+        _gridShown = DateTime.now();
       });
 
   @override
@@ -128,7 +132,10 @@ class _LibraryPageState extends State<LibraryPage> {
                     childAspectRatio: 0.5,
                   ),
                   itemCount: entries.length,
-                  itemBuilder: (context, i) => _Item(entry: entries[i], shelf: _shelf, delay: Duration(milliseconds: base + 35 * min(i, 24))),
+                  itemBuilder: (context, i) {
+                    final settled = DateTime.now().difference(_gridShown) > Duration(milliseconds: base + 300);
+                    return _Item(entry: entries[i], shelf: _shelf, delay: settled ? null : Duration(milliseconds: base + 35 * min(i, 24)));
+                  },
                 ),
               ),
           ]);
@@ -188,7 +195,8 @@ class _Item extends StatelessWidget {
   const _Item({required this.entry, required this.shelf, required this.delay});
   final AniEntry entry;
   final LibraryShelf shelf;
-  final Duration delay;
+  /// Null: shown as is, without the entrance.
+  final Duration? delay;
 
   @override
   Widget build(BuildContext context) {
@@ -201,8 +209,9 @@ class _Item extends StatelessWidget {
     return Pressable(
       onTap: () => Navigator.of(context).push(SoftRoute(MangaPage.anilist(m, heroTag: tag))),
       child: OneShot(
-        delay: delay,
+        delay: delay ?? Duration.zero,
         duration: const Duration(milliseconds: 450),
+        start: delay == null ? 1 : 0,
         builder: (context, t, child) {
           final e = const Cubic(0.2, 0.9, 0.3, 1).transform(t);
           return Opacity(
@@ -221,7 +230,7 @@ class _Item extends StatelessWidget {
             aspectRatio: 2 / 3,
             child: Stack(clipBehavior: Clip.none, children: [
               Positioned.fill(child: ClipPath(clipper: const CutClipper(), child: CoverImage(url: m.cover, radius: 0, heroTag: tag, title: m.title))),
-              if (shelf == LibraryShelf.read) const Positioned(right: -6, bottom: -4, child: HankoStamp(size: 38)),
+              if (shelf == LibraryShelf.read) Positioned(right: -6, bottom: -4, child: HankoStamp(size: 38, animate: delay != null)),
               if (shelf == LibraryShelf.reading) const Positioned(right: 12, top: -8, width: 16, height: 48, child: BrushShape(Brush.ribbon, color: inkRed)),
             ]),
           ),

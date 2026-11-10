@@ -41,7 +41,6 @@ class _MangaPageState extends State<MangaPage> {
   AniMedia? _ani;
   MangaSource? _source;
   SourceManga? _match;
-  List<SourceManga> _candidates = [];
   List<Chapter>? _chapters;
   bool _loadingChapters = false;
   bool _notFound = false;
@@ -129,7 +128,9 @@ class _MangaPageState extends State<MangaPage> {
       if (match == null && seed != null && seed.sourceId == source.id) match = seed;
       if (match == null && _ani != null) {
         match = await _find(source);
-        if (match == null) _candidates = (await source.search(_ani!.searchTitles.first, 1, const {})).items;
+        if (match == null && (_candidatesBySource[source.id]?.isEmpty ?? true)) {
+          _candidatesBySource[source.id] = (await source.search(_ani!.searchTitles.first, 1, const {})).items;
+        }
       }
       if (generation != _generation) return;
       if (match == null) {
@@ -226,30 +227,45 @@ class _MangaPageState extends State<MangaPage> {
       .then<SourceManga?>((m) => _availability[source.id] = m)
       .catchError((Object _) => _availability[source.id] = null);
 
+  /// Search results per source, offered when the user picks the match by hand.
+  final _candidatesBySource = <String, List<SourceManga>>{};
+
+  /// Finds this exact manga in a source. Strict on purpose: a loose match used to open
+  /// the chapters of a sequel or spin-off ("X: Episode Y", "X Next Generation"…).
   Future<SourceManga?> _findInSource(MangaSource source, List<String> titles, {int? aniId}) async {
     if (titles.isEmpty) return null;
     final candidates = <String, SourceManga>{};
     SourceManga? best;
     var bestScore = 0.0;
+    var bestGap = 1 << 20;
     for (final title in titles.take(3)) {
       final page = await source.search(title, 1, const {});
       for (final m in page.items) {
         candidates[m.url] = m;
-        if (aniId != null && m.anilistId == aniId) return m;
+        if (aniId != null && m.anilistId != null) {
+          if (m.anilistId == aniId) {
+            _candidatesBySource[source.id] = candidates.values.toList();
+            return m;
+          }
+          continue; // linked to another AniList entry: certainly not this one
+        }
         for (final t in [m.title, ...m.altTitles]) {
           for (final at in titles) {
             final s = titleSimilarity(t, at);
-            if (s > bestScore) {
+            // On a tie, the title closest in length wins (fewer extra words).
+            final gap = (t.length - at.length).abs();
+            if (s > bestScore || (s == bestScore && gap < bestGap)) {
               bestScore = s;
+              bestGap = gap;
               best = m;
             }
           }
         }
       }
-      if (bestScore >= 0.9) break;
+      if (bestScore >= 1) break;
     }
-    _candidates = candidates.values.toList();
-    return bestScore >= 0.55 ? best : null;
+    _candidatesBySource[source.id] = candidates.values.toList();
+    return bestScore >= 0.75 ? best : null;
   }
 
   Future<void> _pickMatch() async {
@@ -257,7 +273,7 @@ class _MangaPageState extends State<MangaPage> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _MatchSheet(source: _source!, initialQuery: _title, candidates: _candidates),
+      builder: (_) => _MatchSheet(source: _source!, initialQuery: _title, candidates: _candidatesBySource[_source!.id] ?? const []),
     );
     if (picked != null) _loadSource(forced: picked);
   }
@@ -323,16 +339,21 @@ class _MangaPageState extends State<MangaPage> {
             SliverToBoxAdapter(child: SizedBox(height: pad.bottom + 20)),
           ]);
           if (!wide || _ani == null) return scroll;
-          // The main character, inked on a red sun in the top-right corner.
+          // The main character, inked on a red sun, pinned to the top-right corner: it sits
+          // above the list and stays put while the chapters scroll underneath.
           return Stack(children: [
+            scroll,
             Positioned(
               right: 0,
               top: 0,
               width: 360,
               height: 330,
-              child: IgnorePointer(child: FittedBox(fit: BoxFit.contain, alignment: Alignment.topRight, child: SizedBox(width: 430, height: 372, child: InkPortrait(mediaId: _ani!.id)))),
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: FittedBox(fit: BoxFit.contain, alignment: Alignment.topRight, child: SizedBox(width: 430, height: 372, child: InkPortrait(mediaId: _ani!.id))),
+                ),
+              ),
             ),
-            scroll,
           ]);
         }),
       ),

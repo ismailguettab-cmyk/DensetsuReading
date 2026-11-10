@@ -13,6 +13,7 @@ import '../core/theme.dart';
 import 'ink.dart';
 import 'manga_page.dart';
 import 'reco_book.dart';
+import 'reco_symbols.dart';
 import 'widgets.dart';
 
 /// Recommendations (day mode): the nº 1 pick painted in with its main character,
@@ -63,15 +64,21 @@ class _RecoPageState extends State<RecoPage> {
             Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: const SizedBox(height: 18, child: BrushShape(Brush.divider))),
             Padding(
               padding: EdgeInsets.fromLTRB(pad, 16, pad, 0),
-              child: Wrap(crossAxisAlignment: WrapCrossAlignment.end, spacing: 14, children: [
-                Text(context.isEn ? 'Your shelves' : 'Tes rayons', style: Txt.h2(context).copyWith(fontSize: 28)),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    context.isEn ? 'Tap a book to open it · scroll the shelf' : 'Touche un livre pour l’ouvrir · fais défiler l’étagère',
-                    style: Txt.caption(context).copyWith(fontSize: 13),
-                  ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(
+                  child: Wrap(crossAxisAlignment: WrapCrossAlignment.end, spacing: 14, children: [
+                    Text(context.isEn ? 'Your shelves' : 'Tes rayons', style: Txt.h2(context).copyWith(fontSize: 28)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        context.isEn ? 'Tap a book to open it · scroll the shelf' : 'Touche un livre pour l’ouvrir · fais défiler l’étagère',
+                        style: Txt.caption(context).copyWith(fontSize: 13),
+                      ),
+                    ),
+                  ]),
                 ),
+                const SizedBox(width: 16),
+                _ReloadButton(busy: reco.loading, onTap: _draw),
               ]),
             ),
             if (reco.error != null && reco.rows.isEmpty)
@@ -178,6 +185,36 @@ class _Hero extends StatelessWidget {
           ]),
         ),
       ]),
+    );
+  }
+}
+
+/// "Reload": a square ink button that draws a whole new set of suggestions.
+class _ReloadButton extends StatelessWidget {
+  const _ReloadButton({required this.busy, required this.onTap});
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: busy ? null : onTap,
+      child: Container(
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: inkBlack,
+          border: Border.all(color: inkBlack, width: 2),
+          boxShadow: const [BoxShadow(color: inkRed, offset: Offset(4, 4))],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          busy
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: inkPaper))
+              : const Icon(Icons.refresh_rounded, size: 18, color: inkPaper),
+          const SizedBox(width: 8),
+          Text(context.isEn ? 'Reload' : 'Recharger', style: Txt.label(context).copyWith(color: inkPaper, fontSize: 14)),
+        ]),
+      ),
     );
   }
 }
@@ -363,17 +400,20 @@ class _Slip extends StatelessWidget {
 }
 
 /// Category books on a scrolling shelf. Opening one bursts ink into the manga spread.
+/// The books are drawn (no pictures) and all kept alive, so scrolling never rebuilds
+/// them: they drop in once per draw and then stay put.
 class _Shelf extends StatelessWidget {
   const _Shelf({super.key, required this.rows, required this.pad, required this.loading});
   final List<RecoRow> rows;
   final double pad;
   final bool loading;
 
-  static const _looks = [
-    (Color(0xFFFBF8F1), inkBlack, inkBlack), // paper book, black spine
-    (inkBlack, inkPaper, inkRed),
-    (inkRed, inkPaper, inkBlack),
-  ];
+  /// (book, ink, spine) as on the board: the first book red, then paper and ink alternately.
+  static (Color, Color, Color) look(int i) => i == 0
+      ? (inkRed, inkPaper, inkBlack)
+      : i.isOdd
+          ? (const Color(0xFFFBF8F1), inkBlack, inkBlack)
+          : (inkBlack, inkPaper, inkRed);
 
   @override
   Widget build(BuildContext context) {
@@ -382,27 +422,64 @@ class _Shelf extends StatelessWidget {
         height: 248,
         child: loading
             ? Center(child: Text(context.t('reco.loading'), style: Txt.caption(context)))
-            : ListView.separated(
+            : SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.fromLTRB(pad, 14, pad, 22),
-                itemCount: rows.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 22),
-                itemBuilder: (context, i) => Align(
-                  alignment: Alignment.bottomCenter,
-                  child: OneShot(
-                    delay: Duration(milliseconds: 400 + 60 * min(i, 10)),
-                    builder: (context, t, child) => Opacity(
-                      opacity: t,
-                      child: Transform.translate(offset: Offset(0, (1 - const Cubic(0.2, 1.2, 0.4, 1).transform(t)) * -30), child: child),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  for (var i = 0; i < rows.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 22),
+                    OneShot(
+                      delay: Duration(milliseconds: 400 + 60 * min(i, 10)),
+                      builder: (context, t, child) => Opacity(
+                        opacity: t,
+                        child: Transform.translate(offset: Offset(0, (1 - const Cubic(0.2, 1.2, 0.4, 1).transform(t)) * -30), child: child),
+                      ),
+                      child: RepaintBoundary(child: _Book(row: rows[i], look: look(i))),
                     ),
-                    child: _Book(row: rows[i], look: _looks[i % 3]),
-                  ),
-                ),
+                  ],
+                ]),
               ),
       ),
       Container(height: 6, margin: EdgeInsets.fromLTRB(pad, 0, pad, 0), color: inkBlack),
     ]);
   }
+}
+
+/// The category's figure in ink on the book: three characters for shōnen / seinen / josei,
+/// a symbol for the others (from the "Reco" board).
+class BookArt extends StatelessWidget {
+  const BookArt({super.key, required this.category, required this.ink, required this.paper, this.scale = 1});
+  final String category;
+  final Color ink, paper;
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    final trio = bookTrios[category];
+    final parts = trio ?? bookSymbols[category] ?? bookSymbols['forYou']!;
+    final box = trio != null ? const Size(200, 150) : const Size(100, 100);
+    final size = trio != null ? Size(140 * scale, 105 * scale) : Size(96 * scale, 96 * scale);
+    return CustomPaint(size: size, painter: _BookArtPainter(parts, box, ink, paper));
+  }
+}
+
+class _BookArtPainter extends CustomPainter {
+  _BookArtPainter(this.parts, this.viewBox, this.ink, this.paper);
+  final List<BookPart> parts;
+  final Size viewBox;
+  final Color ink, paper;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (filled, d, evenOdd) in parts) {
+      final path = scaledPath(d, viewBox, size);
+      if (evenOdd) path.fillType = PathFillType.evenOdd;
+      canvas.drawPath(path, Paint()..color = filled ? ink : paper);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BookArtPainter old) => old.parts != parts || old.ink != ink || old.paper != paper;
 }
 
 class _Book extends StatefulWidget {
@@ -421,19 +498,20 @@ class _BookState extends State<_Book> {
   Widget build(BuildContext context) {
     final (bg, fg, spine) = widget.look;
     final row = widget.row;
-    final covers = row.items.take(3).toList();
+    final trio = bookTrios.containsKey(row.key);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Pressable(
-        onTap: () => Navigator.of(context).push(InkBurstRoute(RecoBookPage(row: row))),
+        onTap: () => Navigator.of(context).push(InkBurstRoute(RecoBookPage(rowKey: row.key))),
         child: AnimatedContainer(
           duration: Motion.fast,
           curve: const Cubic(0.2, 0.8, 0.2, 1),
           transform: Matrix4.translationValues(0, _hover ? -8 : 0, 0)..rotateZ(_hover ? -1.5 * pi / 180 : 0),
           width: 148,
           height: 212,
+          clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: bg,
             border: Border.all(color: inkBlack, width: 2),
@@ -455,21 +533,12 @@ class _BookState extends State<_Book> {
                 Text('${row.items.length} ${context.isEn ? 'titles' : 'titres'}', style: Txt.caption(context).copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: fg.withValues(alpha: 0.75))),
               ]),
             ),
-            // A small fan of what's inside.
-            for (var i = 0; i < covers.length; i++)
-              Positioned(
-                left: 30 + i * 26.0,
-                bottom: 14 + (i == 1 ? 6 : 0),
-                width: 52,
-                height: 76,
-                child: Transform.rotate(
-                  angle: (i - 1) * 8 * pi / 180,
-                  child: Container(
-                    decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
-                    child: CoverImage(url: covers[i].cover, radius: 0),
-                  ),
-                ),
-              ),
+            // The category's figure, inked in the book's colours.
+            Positioned(
+              left: trio ? 10 : 30,
+              bottom: trio ? -2 : 18,
+              child: BookArt(category: row.key, ink: fg, paper: bg),
+            ),
           ]),
         ),
       ),

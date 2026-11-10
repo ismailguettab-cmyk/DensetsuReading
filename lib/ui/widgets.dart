@@ -31,9 +31,15 @@ class CoverImage extends StatelessWidget {
     );
     Widget image = url == null
         ? placeholder
-        : Image.network(
+        : LayoutBuilder(builder: (context, box) {
+            // Decode at the size it's shown, not at full resolution: lists stay smooth.
+            final dpr = MediaQuery.devicePixelRatioOf(context);
+            // Rounded up by steps so an animated size doesn't decode again on every frame.
+            final w = box.maxWidth.isFinite ? ((box.maxWidth * dpr) / 120).ceil() * 120 : null;
+            return Image.network(
             Net.image(url!, headers),
             headers: Net.nativeHeaders(url!, headers),
+            cacheWidth: w == null || w <= 0 ? null : w,
             fit: BoxFit.cover,
             gaplessPlayback: true,
             frameBuilder: (context, child, frame, sync) {
@@ -50,6 +56,7 @@ class CoverImage extends StatelessWidget {
             },
             errorBuilder: (_, __, ___) => placeholder,
           );
+          });
     image = ClipRRect(borderRadius: BorderRadius.circular(radius), child: SizedBox.expand(child: image));
     if (heroTag != null) image = Hero(tag: heroTag!, child: image);
     return image;

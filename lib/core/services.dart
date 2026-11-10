@@ -31,10 +31,9 @@ class Services {
   static Future<void> init() async {
     i = Services._(await SharedPreferences.getInstance());
     final token = takeRedirectToken();
-    if (token != null) {
-      i.session.signInWithToken(token);
-    } else {
-      i.session.refresh();
-    }
+    // Recommendations are prepared in the background as soon as the list is known,
+    // so the "For you" tab is ready (or shows the last draw) when it's opened.
+    final ready = token != null ? i.session.signInWithToken(token) : i.session.refresh();
+    ready.then((_) => i.reco.onVisit());
   }
 }

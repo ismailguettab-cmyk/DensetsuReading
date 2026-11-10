@@ -9,7 +9,8 @@ const _fr = <String, String>{
   'nav.sources': 'Sources',
   'nav.settings': 'Paramètres',
 
-  'login.title': 'Toutes tes lectures,\nau même endroit.',
+  'login.title': 'La weeberie\nsans limite.',
+  'login.unavailable': 'La connexion AniList arrive très bientôt. En attendant, continue avec ton pseudo AniList.',
   'login.subtitle': 'Connecte ton compte AniList : ton profil, ta progression et tes recommandations te suivent.',
   'login.anilist': 'Se connecter avec AniList',
   'login.username': 'Continuer avec un pseudo AniList',
@@ -184,7 +185,8 @@ const _en = <String, String>{
   'nav.sources': 'Sources',
   'nav.settings': 'Settings',
 
-  'login.title': 'All your reading,\nin one place.',
+  'login.title': 'Weeb life,\nwithout limits.',
+  'login.unavailable': 'AniList sign-in is coming very soon. Meanwhile, continue with your AniList username.',
   'login.subtitle': 'Connect your AniList account: your profile, progress and recommendations follow you.',
   'login.anilist': 'Sign in with AniList',
   'login.username': 'Continue with an AniList username',

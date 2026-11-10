@@ -7,7 +7,7 @@ import '../core/services.dart';
 import '../core/theme.dart';
 import 'home_page.dart';
 import 'reco_page.dart';
-import 'search_page.dart';
+import 'anilist_search_page.dart';
 import 'settings_page.dart';
 import 'sources_page.dart';
 import 'widgets.dart';
@@ -56,12 +56,16 @@ class _ShellState extends State<Shell> {
   final _visited = <int>{0};
   final _navigators = List.generate(_tabs.length, (_) => GlobalKey<NavigatorState>());
 
+  /// Bumped each time Home comes back into view, so its entrance plays again.
+  final _homeVisit = ValueNotifier(0);
+
   void _select(int i) {
     if (i == _index) {
       // Tapping the current tab again goes back to its root.
       _navigators[i].currentState?.popUntil((r) => r.isFirst);
       return;
     }
+    if (i == 0) _homeVisit.value++;
     setState(() {
       _index = i;
       _current.value = i;
@@ -71,7 +75,10 @@ class _ShellState extends State<Shell> {
   }
 
   Widget _page(int i) => switch (i) {
-        0 => const HomePage(),
+        0 => ValueListenableBuilder(
+            valueListenable: _homeVisit,
+            builder: (_, visit, _) => HomePage(key: ValueKey(visit)),
+          ),
         1 => const RecoPage(),
         2 => const SearchPage(),
         3 => const SourcesPage(),

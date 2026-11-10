@@ -10,6 +10,7 @@ import '../core/theme.dart';
 import '../sources/catalog.dart';
 import '../sources/source.dart';
 import 'ink.dart';
+import 'search_page.dart';
 import 'shell.dart';
 import 'widgets.dart';
 
@@ -39,9 +40,32 @@ class _SourcesPageState extends State<SourcesPage> {
           final mine = list.where(store.isInstalled).toList();
           final available = list.where((s) => !store.isInstalled(s)).toList();
           return ListView(padding: pad, children: [
-            Text(context.t('sources.title'), style: Txt.display(context).copyWith(fontSize: 54)),
-            const SizedBox(height: 8),
-            Text(context.t('sources.subtitle'), style: Txt.body(context).copyWith(fontSize: 16)),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(context.t('sources.title'), style: Txt.display(context).copyWith(fontSize: 54)),
+                  const SizedBox(height: 8),
+                  Text(context.t('sources.subtitle'), style: Txt.body(context).copyWith(fontSize: 16)),
+                ]),
+              ),
+              if (store.installed.isNotEmpty) ...[
+                const SizedBox(width: 16),
+                // Browse a source's own catalogue (searching normally goes through AniList).
+                Pressable(
+                  onTap: () => Navigator.of(context).push(SoftRoute(const SourceBrowserPage())),
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2), boxShadow: const [BoxShadow(color: inkBlack, offset: Offset(4, 4))], color: const Color(0xFFFBF8F1)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.menu_book_rounded, size: 18, color: inkBlack),
+                      const SizedBox(width: 8),
+                      Text(context.isEn ? 'Browse a source' : 'Parcourir une source', style: Txt.label(context).copyWith(fontSize: 14)),
+                    ]),
+                  ),
+                ),
+              ],
+            ]),
             const SizedBox(height: 22),
             Container(
               padding: const EdgeInsets.only(bottom: 6),

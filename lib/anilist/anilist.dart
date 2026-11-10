@@ -92,6 +92,26 @@ class AniMedia {
     );
   }
 
+  /// Same shape as the API, so [AniMedia.fromJson] reads it back (cached recommendations).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': {'userPreferred': title, 'romaji': romaji, 'english': english, 'native': native},
+        'synonyms': synonyms,
+        'coverImage': {'extraLarge': cover, 'color': coverColor},
+        'bannerImage': banner,
+        'genres': genres,
+        'tags': [for (final t in tags) {'name': t.name, 'rank': t.rank}],
+        'meanScore': meanScore,
+        'popularity': popularity,
+        'chapters': chapters,
+        'volumes': volumes,
+        'startDate': {'year': year},
+        'status': status,
+        'format': format,
+        'countryOfOrigin': country,
+        'isAdult': isAdult,
+      };
+
   static String? _cleanDescription(String? s) {
     if (s == null) return null;
     return s
@@ -175,8 +195,15 @@ class AniList {
   AniList([this.token]);
 
   static const endpoint = 'https://graphql.anilist.co';
-  static const redirectUri = 'http://localhost:5173/auth';
   final String? token;
+
+  /// The app's AniList clients (public IDs, "implicit grant": no secret in the app).
+  /// One per return address, as AniList allows a single redirect URL per client:
+  /// the tablet app comes back through `densetsureading://auth`, the website through its own page.
+  /// They can also be given at build time (`--dart-define=ANILIST_APP_ID=…`).
+  static const appClientId = String.fromEnvironment('ANILIST_APP_ID', defaultValue: '');
+  static const webClientId = String.fromEnvironment('ANILIST_WEB_ID', defaultValue: '');
+  static const appCallbackScheme = 'densetsureading';
 
   static String authorizeUrl(String clientId) =>
       'https://anilist.co/api/v2/oauth/authorize?client_id=$clientId&response_type=token';
@@ -265,6 +292,51 @@ class AniList {
     return ((data['Page']?['media'] as List?) ?? const [])
         .map((m) => AniMedia.fromJson(m as Map<String, dynamic>))
         .toList();
+  }
+
+  /// The whole AniList manga catalogue, by name and/or filters (null = not filtered).
+  /// Returns one page of results and whether there are more.
+  Future<(List<AniMedia>, bool)> browse({
+    int page = 1,
+    int perPage = 30,
+    String? search,
+    String? status,
+    List<String> genres = const [],
+    String? tag,
+    String? country,
+    String? format,
+    int? minScore,
+    int? yearFrom,
+    int? yearTo,
+    String sort = 'POPULARITY_DESC',
+  }) async {
+    final q = search?.trim();
+    final data = await query(
+      r'query($page: Int, $n: Int, $search: String, $status: MediaStatus, $genres: [String], $tag: String, '
+              r'$country: CountryCode, $formats: [MediaFormat], $score: Int, $from: FuzzyDateInt, $to: FuzzyDateInt, $sort: [MediaSort]) '
+              r'{ Page(page: $page, perPage: $n) { pageInfo { hasNextPage } media(type: MANGA, isAdult: false, search: $search, '
+              r'status: $status, genre_in: $genres, tag: $tag, countryOfOrigin: $country, format_in: $formats, '
+              r'averageScore_greater: $score, startDate_greater: $from, startDate_lesser: $to, sort: $sort) { ...M } } }' +
+          mediaFragment,
+      {
+        'page': page,
+        'n': perPage,
+        if (q != null && q.isNotEmpty) 'search': q,
+        'status': ?status,
+        if (genres.isNotEmpty) 'genres': genres,
+        'tag': ?tag,
+        'country': ?country,
+        'formats': format != null ? [format] : const ['MANGA', 'ONE_SHOT'],
+        if (minScore != null) 'score': minScore - 1,
+        if (yearFrom != null) 'from': yearFrom * 10000,
+        if (yearTo != null) 'to': (yearTo + 1) * 10000,
+        // A typed name ranks by closeness first, then by the chosen order.
+        'sort': [if (q != null && q.isNotEmpty) 'SEARCH_MATCH', sort],
+      },
+    );
+    final p = data['Page'] as Map<String, dynamic>?;
+    final items = ((p?['media'] as List?) ?? const []).map((m) => AniMedia.fromJson(m as Map<String, dynamic>)).toList();
+    return (items, p?['pageInfo']?['hasNextPage'] as bool? ?? false);
   }
 
   /// Main character of a manga (name and picture), for the home page portrait.

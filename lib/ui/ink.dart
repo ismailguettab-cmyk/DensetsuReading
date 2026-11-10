@@ -141,22 +141,26 @@ class _RevealClip extends CustomClipper<Rect> {
 
 /// One-shot entrance driven by a single controller: delay, duration, curve, then a builder.
 class OneShot extends StatefulWidget {
-  const OneShot({super.key, required this.builder, this.delay = Duration.zero, this.duration = const Duration(milliseconds: 350), this.child});
+  const OneShot({super.key, required this.builder, this.delay = Duration.zero, this.duration = const Duration(milliseconds: 350), this.child, this.start = 0});
 
   final Widget Function(BuildContext context, double t, Widget? child) builder;
   final Duration delay, duration;
   final Widget? child;
+
+  /// 1 shows the end state straight away (no entrance).
+  final double start;
 
   @override
   State<OneShot> createState() => _OneShotState();
 }
 
 class _OneShotState extends State<OneShot> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: widget.duration);
+  late final _c = AnimationController(vsync: this, duration: widget.duration, value: widget.start);
 
   @override
   void initState() {
     super.initState();
+    if (widget.start >= 1) return;
     Future.delayed(widget.delay, () {
       if (mounted) _c.forward();
     });
@@ -259,11 +263,14 @@ class _EnsoPainter extends CustomPainter {
 
 /// Round red seal (読了 etc.) slammed onto a cover: big and turned, then lands at −10°.
 class HankoStamp extends StatelessWidget {
-  const HankoStamp({super.key, this.text = '読了', this.size = 44, this.delay = Duration.zero, this.caption});
+  const HankoStamp({super.key, this.text = '読了', this.size = 44, this.delay = Duration.zero, this.caption, this.animate = true});
   final String text;
   final String? caption;
   final double size;
   final Duration delay;
+
+  /// False: already stamped (no slam), e.g. covers reached by scrolling.
+  final bool animate;
 
   @override
   Widget build(BuildContext context) {
@@ -285,6 +292,7 @@ class HankoStamp extends StatelessWidget {
     return OneShot(
       delay: delay,
       duration: const Duration(milliseconds: 350),
+      start: animate ? 0 : 1,
       builder: (context, t, child) {
         // 0 → .6: falls big and turned; .6 → 1: settles.
         final a = (t / 0.6).clamp(0.0, 1.0), b = ((t - 0.6) / 0.4).clamp(0.0, 1.0);

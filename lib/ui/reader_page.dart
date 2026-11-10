@@ -86,12 +86,15 @@ class _ReaderPageState extends State<ReaderPage> {
   void initState() {
     super.initState();
     _settings.addListener(_onSettings);
+    // Full screen while reading: the system bars hide (a swipe from the edge brings them back).
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _load(widget.startPage);
     _scheduleHide();
   }
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _settings.removeListener(_onSettings);
     _hideChrome?.cancel();
     _pager.dispose();
@@ -504,8 +507,11 @@ class _ReaderPageState extends State<ReaderPage> {
     );
     final screenAspect = viewport.width / viewport.height;
     final tall = total < screenAspect;
+    // Double-page reading fills the screen without ever scrolling: the spread (or a lone
+    // wide page) is shown whole, as big as the screen allows, proportions untouched.
+    final spreadMode = _lastDouble == true && fit == PageFit.fill;
 
-    if (fit == PageFit.fit || (fit == PageFit.width && !tall)) {
+    if (fit == PageFit.fit || spreadMode || (fit == PageFit.width && !tall)) {
       return _zoomable(index, Center(child: spread));
     }
     if (tall) {

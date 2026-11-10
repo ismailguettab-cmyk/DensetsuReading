@@ -17,16 +17,16 @@ import 'shell.dart';
 import 'sources_page.dart';
 import 'widgets.dart';
 
-/// Step 1: pick a source (or install one). Step 2: search inside it.
+/// Browse one source directly (from the Sources tab). Step 1: pick a source. Step 2: search inside it.
 /// The source cards open like book covers each time the tab is shown.
-class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+class SourceBrowserPage extends StatefulWidget {
+  const SourceBrowserPage({super.key});
 
   @override
-  State<SearchPage> createState() => _SearchPageState();
+  State<SourceBrowserPage> createState() => _SourceBrowserPageState();
 }
 
-class _SearchPageState extends State<SearchPage> {
+class _SourceBrowserPageState extends State<SourceBrowserPage> {
   ValueListenable<int>? _tab;
   int _replay = 0;
 
@@ -40,7 +40,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _onTab() {
-    if (_tab?.value == 2 && mounted) setState(() => _replay++);
+    if (_tab?.value == 3 && mounted) setState(() => _replay++);
   }
 
   @override
@@ -71,6 +71,13 @@ class _SearchPageState extends State<SearchPage> {
           return _PageTurn(
             key: ValueKey(_replay),
             child: ListView(padding: pad, children: [
+              if (Navigator.of(context).canPop()) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconCircle(icon: Icons.arrow_back_rounded, onTap: () => Navigator.of(context).maybePop(), tooltip: context.t('common.back')),
+                ),
+                const SizedBox(height: 18),
+              ],
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

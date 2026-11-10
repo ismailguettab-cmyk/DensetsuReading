@@ -1,17 +1,17 @@
 # Construit l'APK Android sur les serveurs de GitHub (aucune installation locale nécessaire).
-# Le fichier est publié dans la release « apk-latest » : lien direct à ouvrir depuis la tablette.
+# Sur toutes les branches : analyse du code puis APK (téléchargeable dans l'onglet Actions).
+# Sur main : l'APK est aussi publié dans la release « apk-latest » (lien direct pour la tablette).
 name: APK Android
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: apk
+  group: apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,8 +33,14 @@ jobs:
       - run: flutter --version
       - run: flutter pub get
 
+      # Erreurs et avertissements bloquent ; les simples conseils de style non.
+      - run: flutter analyze --no-fatal-infos
+
+      # Identifiants publics des clients AniList (variables du dépôt, facultatives).
       # Signé avec la clé de debug (suffisant pour installer sur sa propre tablette).
-      - run: flutter build apk --release --no-tree-shake-icons
+      - run: >
+          flutter build apk --release --no-tree-shake-icons
+          --dart-define=ANILIST_APP_ID=${{ vars.ANILIST_APP_ID }}
 
       - name: Renommer l'APK
         run: cp build/app/outputs/flutter-apk/app-release.apk DensetsuReading.apk
@@ -45,6 +51,7 @@ jobs:
           path: DensetsuReading.apk
 
       - name: Publier dans la release apk-latest
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-latest

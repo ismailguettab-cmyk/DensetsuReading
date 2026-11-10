@@ -7,9 +7,11 @@ import '../anilist/anilist.dart';
 import '../anilist/recommender.dart';
 import '../core/l10n.dart';
 import '../core/motion.dart';
+import '../core/services.dart';
 import '../core/theme.dart';
 import 'ink.dart';
 import 'manga_page.dart';
+import 'reco_symbols.dart';
 import 'widgets.dart';
 
 /// Quick fade so the book page's own ink burst carries the transition.
@@ -27,8 +29,10 @@ class InkBurstRoute<T> extends PageRouteBuilder<T> {
 /// A recommendation category opened as a manga: ink bursts, drops fly, and a two-page
 /// spread unfolds. Read right to left; each pick is a panel on the page.
 class RecoBookPage extends StatefulWidget {
-  const RecoBookPage({super.key, required this.row});
-  final RecoRow row;
+  const RecoBookPage({super.key, required this.rowKey});
+
+  /// The category's key: the row is read from the recommender, so a reload shows up here.
+  final String rowKey;
 
   @override
   State<RecoBookPage> createState() => _RecoBookPageState();
@@ -37,8 +41,22 @@ class RecoBookPage extends StatefulWidget {
 class _RecoBookPageState extends State<RecoBookPage> {
   int _spread = 0;
   int _dir = 1;
+  bool _reloading = false;
 
-  int get _spreads => max(1, (widget.row.items.length / 6).ceil());
+  RecoRow? get _row => Services.i.reco.rows.where((r) => r.key == widget.rowKey).firstOrNull;
+  int get _spreads => max(1, ((_row?.items.length ?? 0) / 6).ceil());
+
+  Future<void> _reload() async {
+    if (_reloading) return;
+    setState(() => _reloading = true);
+    await Services.i.reco.redrawRow(widget.rowKey);
+    if (!mounted) return;
+    setState(() {
+      _reloading = false;
+      _dir = -1;
+      _spread = 0;
+    });
+  }
 
   void _turn(int delta) {
     final next = (_spread + delta).clamp(0, _spreads - 1);
@@ -50,8 +68,12 @@ class _RecoBookPageState extends State<RecoBookPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final row = widget.row;
+  Widget build(BuildContext context) => ListenableBuilder(listenable: Services.i.reco, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
+    final row = _row;
+    if (row == null) return const Scaffold(backgroundColor: inkPaper);
+    if (_spread >= _spreads) _spread = _spreads - 1;
     final size = MediaQuery.sizeOf(context);
     final wide = size.width >= 900;
     final spreadW = min(940.0, size.width - (wide ? 220 : 40));
@@ -106,6 +128,22 @@ class _RecoBookPageState extends State<RecoBookPage> {
                   ),
                 ),
                 const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  color: inkBlack,
+                  child: Text(
+                    '${context.isEn ? 'Spread' : 'Double page'} ${_spread + 1} / $_spreads',
+                    style: Txt.label(context).copyWith(color: inkPaper, fontSize: 14),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _RoundButton(
+                  icon: Icons.refresh_rounded,
+                  label: context.isEn ? 'Reload: new picks' : 'Recharger : nouvelles suggestions',
+                  busy: _reloading,
+                  onTap: _reload,
+                ),
+                const SizedBox(width: 12),
                 _RoundButton(icon: Icons.close_rounded, label: context.t('common.close'), onTap: () => Navigator.of(context).maybePop()),
               ]),
             ),
@@ -154,9 +192,9 @@ class _RecoBookPageState extends State<RecoBookPage> {
                           ),
                           child: child,
                         ),
-                        child: Row(key: ValueKey(_spread), children: [
-                          Expanded(child: _MangaPage(items: page(_spread * 2 + 1), number: _spread * 2 + 2, left: true, seed: _spread * 2 + 1)),
-                          Expanded(child: _MangaPage(items: page(_spread * 2), number: _spread * 2 + 1, left: false, seed: _spread * 2)),
+                        child: Row(key: ValueKey('${row.items.firstOrNull?.id}-$_spread'), children: [
+                          Expanded(child: _MangaPage(items: page(_spread * 2 + 1), number: _spread * 2 + 2, left: true, sfx: bookSfx[row.key])),
+                          Expanded(child: _MangaPage(items: page(_spread * 2), number: _spread * 2 + 1, left: false, sfx: bookSfx[row.key])),
                         ]),
                       ),
                     ),
@@ -174,10 +212,11 @@ class _RecoBookPageState extends State<RecoBookPage> {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({required this.icon, required this.label, this.onTap});
+  const _RoundButton({required this.icon, required this.label, this.onTap, this.busy = false});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) => Tooltip(
@@ -191,7 +230,9 @@ class _RoundButton extends StatelessWidget {
               width: 54,
               height: 54,
               decoration: BoxDecoration(color: inkBlack, shape: BoxShape.circle, border: Border.all(color: inkPaper, width: 2)),
-              child: Icon(icon, color: inkPaper, size: 26),
+              child: busy
+                  ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: inkPaper)))
+                  : Icon(icon, color: inkPaper, size: 26),
             ),
           ),
         ),
@@ -200,11 +241,11 @@ class _RoundButton extends StatelessWidget {
 
 /// One manga page: a big panel on top, two below, cut at a slant.
 class _MangaPage extends StatelessWidget {
-  const _MangaPage({required this.items, required this.number, required this.left, required this.seed});
+  const _MangaPage({required this.items, required this.number, required this.left, this.sfx});
   final List<AniMedia> items;
   final int number;
   final bool left;
-  final int seed;
+  final String? sfx;
 
   static const _panels = [
     [Offset(0, 0), Offset(1, 0), Offset(1, 0.56), Offset(0, 0.61)],
@@ -250,7 +291,7 @@ class _MangaPage extends StatelessWidget {
                     media: items[i],
                     shape: [for (final o in _panels[i]) Offset(o.dx * s.width, o.dy * s.height)],
                     big: i == 0,
-                    sfx: _sfx[(seed + i) % _sfx.length],
+                    sfx: sfx ?? _sfx[(number + i) % _sfx.length],
                     delay: Duration(milliseconds: 650 + (left ? 3 : 0) * 120 + i * 120),
                   ),
                 ),
@@ -283,10 +324,16 @@ class _Panel extends StatelessWidget {
       Offset(shape.map((o) => o.dx).reduce(max), shape.map((o) => o.dy).reduce(max)),
     );
     final score = media.meanScore != null ? '★ ${(media.meanScore! / 10).toStringAsFixed(1).replaceAll('.', ',')}' : null;
+    // Every panel fills the whole page and is cut to its shape by the clip, so hits must go
+    // through the shape: an opaque mouse region here made the top panel catch every tap,
+    // and the whole page opened the same manga.
     return GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
       onTap: () => Navigator.of(context).push(SoftRoute(MangaPage.anilist(media))),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
+        opaque: false,
+        hitTestBehavior: HitTestBehavior.deferToChild,
         child: OneShot(
           delay: delay,
           duration: const Duration(milliseconds: 800),
