@@ -41,6 +41,9 @@ class Settings extends ChangeNotifier {
   bool pageAnimation = true;
 
   String geminiKey = '';
+
+  /// Read-only GitHub token, only needed for in-app updates while the repository is private.
+  String githubToken = '';
   String anilistClientId = const String.fromEnvironment('ANILIST_CLIENT_ID');
 
   void update(void Function(Settings s) change) {
@@ -64,6 +67,7 @@ class Settings extends ChangeNotifier {
         'showPageNumber': showPageNumber,
         'pageAnimation': pageAnimation,
         'geminiKey': geminiKey,
+        'githubToken': githubToken,
         'anilistClientId': anilistClientId,
       };
 
@@ -82,6 +86,7 @@ class Settings extends ChangeNotifier {
     showPageNumber = j['showPageNumber'] as bool? ?? showPageNumber;
     pageAnimation = j['pageAnimation'] as bool? ?? pageAnimation;
     geminiKey = j['geminiKey'] as String? ?? geminiKey;
+    githubToken = j['githubToken'] as String? ?? githubToken;
     final id = j['anilistClientId'] as String?;
     if (id != null && id.isNotEmpty) anilistClientId = id;
   }

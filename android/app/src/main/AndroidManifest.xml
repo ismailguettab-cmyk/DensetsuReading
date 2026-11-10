@@ -1,6 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Sources de mangas, AniList et Gemini passent par Internet. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Mise à jour depuis les Paramètres : ouvrir l'installateur Android sur l'APK téléchargé. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="replace"/>
     <application
         android:label="Densetsu Reading"
         android:name="${applicationName}"

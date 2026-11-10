@@ -41,6 +41,7 @@ jobs:
       - run: >
           flutter build apk --release --no-tree-shake-icons
           --dart-define=ANILIST_APP_ID=${{ vars.ANILIST_APP_ID }}
+          --dart-define=BUILD_SHA=${{ github.sha }}
 
       - name: Renommer l'APK
         run: cp build/app/outputs/flutter-apk/app-release.apk DensetsuReading.apk

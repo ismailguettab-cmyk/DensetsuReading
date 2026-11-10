@@ -5,6 +5,7 @@ import '../core/l10n.dart';
 import '../core/services.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
+import '../core/updater.dart';
 import 'shell.dart';
 import 'widgets.dart';
 
@@ -65,6 +66,10 @@ class SettingsPage extends StatelessWidget {
                         ),
                       ),
                   ]),
+                  if (AppUpdater.supported) ...[
+                    const SizedBox(height: 22),
+                    SettingsGroup(title: 'Application', children: [_UpdateSection(settings: set)]),
+                  ],
                   const SizedBox(height: 22),
                   SettingsGroup(title: context.t('settings.data'), children: [
                     SettingRow(
@@ -317,6 +322,164 @@ class _GeminiKeyState extends State<_GeminiKey> {
             ]),
           ),
         ),
+      ]),
+    );
+  }
+}
+
+enum _UpdateStep { idle, checking, upToDate, available, downloading, ready, error }
+
+/// "Update the app": compares this build with the APK published on GitHub, downloads it
+/// and opens Android's installer. While the repository is private, a read-only GitHub
+/// token is needed to see the release.
+class _UpdateSection extends StatefulWidget {
+  const _UpdateSection({required this.settings});
+  final Settings settings;
+
+  @override
+  State<_UpdateSection> createState() => _UpdateSectionState();
+}
+
+class _UpdateSectionState extends State<_UpdateSection> {
+  late final _token = TextEditingController(text: widget.settings.githubToken);
+  _UpdateStep _step = _UpdateStep.idle;
+  UpdateInfo? _info;
+  double _progress = 0;
+  String? _message;
+  bool _needsToken = false;
+
+  @override
+  void dispose() {
+    _token.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _step = _UpdateStep.checking;
+      _message = null;
+    });
+    try {
+      final info = await AppUpdater.check(widget.settings.githubToken);
+      if (!mounted) return;
+      setState(() {
+        _info = info;
+        _needsToken = false;
+        _step = info.newer ? _UpdateStep.available : _UpdateStep.upToDate;
+      });
+    } on UpdateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _step = _UpdateStep.error;
+        _needsToken = e.kind == UpdateErrorKind.notFound;
+        _message = e.kind == UpdateErrorKind.notFound
+            ? (context.isEn
+                ? 'No update found. The repository is private: paste a read-only GitHub token below.'
+                : 'Mise à jour introuvable. Le dépôt est privé : colle un jeton GitHub (lecture seule) ci-dessous.')
+            : (context.isEn ? 'No connection to GitHub.' : 'Impossible de joindre GitHub.');
+      });
+    }
+  }
+
+  Future<void> _download() async {
+    final info = _info;
+    if (info == null) return;
+    setState(() {
+      _step = _UpdateStep.downloading;
+      _progress = 0;
+      _message = null;
+    });
+    try {
+      await for (final p in AppUpdater.download(info, widget.settings.githubToken)) {
+        if (mounted) setState(() => _progress = p);
+      }
+      if (!mounted) return;
+      setState(() => _step = _UpdateStep.ready);
+      await _install();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _step = _UpdateStep.error;
+        _message = context.isEn ? 'The download failed. Try again.' : 'Le téléchargement a échoué. Réessaie.';
+      });
+    }
+  }
+
+  Future<void> _install() async {
+    final error = await AppUpdater.install();
+    if (!mounted || error == null) return;
+    setState(() => _message = context.isEn
+        ? 'Android blocked the install: allow “Install unknown apps” for Densetsu Reading, then tap Install again.'
+        : 'Android a bloqué l’installation : autorise « Installer des applis inconnues » pour Densetsu Reading, puis touche Installer à nouveau.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final en = context.isEn;
+    final build = AppUpdater.currentBuild;
+    final info = _info;
+    final when = info == null ? '' : context.ago(info.date);
+    final mb = info == null ? '' : (info.size / 1e6).toStringAsFixed(0);
+    final status = switch (_step) {
+      _UpdateStep.idle => en ? 'Checks the latest version published on GitHub.' : 'Vérifie la dernière version publiée sur GitHub.',
+      _UpdateStep.checking => en ? 'Checking…' : 'Vérification…',
+      _UpdateStep.upToDate => en ? 'You have the latest version.' : 'Tu as la dernière version.',
+      _UpdateStep.available => en
+          ? 'A new version is available ($when, $mb MB).'
+          : 'Une nouvelle version est disponible ($when, $mb Mo).',
+      _UpdateStep.downloading => '${en ? 'Downloading' : 'Téléchargement'} ${(100 * _progress).round()} %',
+      _UpdateStep.ready => en ? 'Downloaded: confirm the install in the Android window.' : 'Téléchargée : confirme l’installation dans la fenêtre d’Android.',
+      _UpdateStep.error => _message ?? '',
+    };
+    final busy = _step == _UpdateStep.checking || _step == _UpdateStep.downloading;
+    final (label, action) = switch (_step) {
+      _UpdateStep.available => (en ? 'Download and install' : 'Télécharger et installer', _download),
+      _UpdateStep.ready => (en ? 'Install' : 'Installer', _install),
+      _ => (en ? 'Check for updates' : 'Rechercher une mise à jour', _check),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(en ? 'Update the app' : 'Mettre à jour l’application', style: Txt.label(context)),
+              const SizedBox(height: 4),
+              Text(
+                '${en ? 'Installed version' : 'Version installée'} : ${build.isEmpty ? (en ? 'local build' : 'version locale') : build.substring(0, 7)}',
+                style: Txt.caption(context),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 16),
+          AppButton(label: label, tone: ButtonTone.accent, loading: busy, onTap: busy ? null : action),
+        ]),
+        const SizedBox(height: 10),
+        Text(status, style: Txt.caption(context).copyWith(color: _step == _UpdateStep.error ? p.danger : null)),
+        if (_step == _UpdateStep.downloading) ...[
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(value: _progress, minHeight: 6, color: p.accent, backgroundColor: p.surface2),
+          ),
+        ],
+        if (_needsToken || widget.settings.githubToken.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          TextField(
+            controller: _token,
+            obscureText: true,
+            onChanged: (v) => widget.settings.update((x) => x.githubToken = v.trim()),
+            style: Txt.label(context).copyWith(fontWeight: FontWeight.w500),
+            decoration: InputDecoration(
+              hintText: en ? 'GitHub token (github_pat_…)' : 'Jeton GitHub (github_pat_…)',
+              filled: true,
+              fillColor: p.surface2,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+        ],
       ]),
     );
   }
