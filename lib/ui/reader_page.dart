@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -507,11 +508,33 @@ class _ReaderPageState extends State<ReaderPage> {
     );
     final screenAspect = viewport.width / viewport.height;
     final tall = total < screenAspect;
-    // Double-page reading fills the screen without ever scrolling: the spread (or a lone
-    // wide page) is shown whole, as big as the screen allows, proportions untouched.
-    final spreadMode = _lastDouble == true && fit == PageFit.fill;
+    // Double-page reading covers the whole screen, edge to edge, never scrolling:
+    // the gap is closed first by widening the pages a little (at most 12 %, too little to
+    // see), then whatever is still too tall is trimmed evenly at the top and bottom.
+    if (_lastDouble == true && fit == PageFit.fill) {
+      const maxStretch = 1.12;
+      final ratio = screenAspect / total; // > 1: pages narrower than the screen
+      final sx = ratio > 1 ? min(ratio, maxStretch) : 1.0;
+      final sy = ratio < 1 ? min(1 / ratio, maxStretch) : 1.0;
+      return _zoomable(
+        index,
+        SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: 1000 * total * sx,
+              height: 1000 * sy,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (var k = 0; k < shown.length; k++) Expanded(flex: (aspects[k] * 1000).round(), child: _pageImage(shown[k])),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
 
-    if (fit == PageFit.fit || spreadMode || (fit == PageFit.width && !tall)) {
+    if (fit == PageFit.fit || (fit == PageFit.width && !tall)) {
       return _zoomable(index, Center(child: spread));
     }
     if (tall) {

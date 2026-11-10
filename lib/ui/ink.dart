@@ -323,7 +323,7 @@ class InkRoute<T> extends PageRouteBuilder<T> {
                 return Stack(children: [
                   // The new page only shows once the ink covers the screen.
                   Opacity(opacity: v >= 0.45 ? 1 : 0, child: child),
-                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _SweepPainter(v))),
+                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: InkSweepPainter(v))),
                 ]);
               },
             );
@@ -331,8 +331,8 @@ class InkRoute<T> extends PageRouteBuilder<T> {
         );
 }
 
-class _SweepPainter extends CustomPainter {
-  _SweepPainter(this.v);
+class InkSweepPainter extends CustomPainter {
+  InkSweepPainter(this.v);
   final double v;
 
   static const _rows = [
@@ -369,7 +369,7 @@ class _SweepPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SweepPainter old) => old.v != v;
+  bool shouldRepaint(InkSweepPainter old) => old.v != v;
 }
 
 /// Red brush underline that draws itself under the active tab.
@@ -417,6 +417,48 @@ class InkTag extends StatelessWidget {
           child: Text(text, style: Txt.tag(context).copyWith(color: inkPaper)),
         ),
       );
+}
+
+/// White words on a black ink smear that stretches out from the left with a little
+/// overshoot, then the text appears ("DANS MA LISTE"). Transform and opacity only.
+class InkStretchTag extends StatelessWidget {
+  const InkStretchTag(this.text, {super.key, this.delay = Duration.zero, this.animate = true});
+  final String text;
+  final Duration delay;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    return OneShot(
+      delay: delay,
+      duration: const Duration(milliseconds: 460),
+      start: animate ? 0 : 1,
+      builder: (context, t, child) {
+        final stretch = const Cubic(0.2, 1.25, 0.4, 1).transform((t / 0.7).clamp(0.0, 1.0));
+        // Thick blob at first, thinning as it stretches (ink spreading on paper).
+        final thick = 1 + 0.35 * (1 - (t / 0.7).clamp(0.0, 1.0));
+        final words = Curves.easeOut.transform(((t - 0.45) / 0.55).clamp(0.0, 1.0));
+        return Stack(children: [
+          Positioned(
+            left: -8,
+            right: -10,
+            top: -5,
+            bottom: -5,
+            child: Transform(
+              alignment: Alignment.centerLeft,
+              transform: Matrix4.diagonal3Values(max(0.02, stretch), thick, 1),
+              child: const BrushShape(Brush.sweepRight),
+            ),
+          ),
+          Opacity(opacity: words, child: Transform.translate(offset: Offset(-6 * (1 - words), 0), child: child)),
+        ]);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Text(text, style: Txt.tag(context).copyWith(color: Colors.white, fontSize: 11, letterSpacing: 1.2)),
+      ),
+    );
+  }
 }
 
 /// A cover laid down on three brush strokes (two black, one red) with ink drops,
@@ -601,3 +643,57 @@ class Colorized extends StatelessWidget {
   }
 }
 
+
+/// Reload under ink: while [busy], straight brush strokes sweep across and cover the child;
+/// once the new content is there, the strokes leave the other way and reveal it.
+class InkReload extends StatefulWidget {
+  const InkReload({super.key, required this.busy, required this.child});
+  final bool busy;
+  final Widget child;
+
+  @override
+  State<InkReload> createState() => _InkReloadState();
+}
+
+class _InkReloadState extends State<InkReload> with SingleTickerProviderStateMixin {
+  // Same timeline as the page sweep: 0 → .5 the ink covers, .5 → 1 it leaves.
+  late final _c = AnimationController(vsync: this, value: 1);
+
+  @override
+  void didUpdateWidget(InkReload old) {
+    super.didUpdateWidget(old);
+    if (Motion.reduced(context)) return;
+    if (widget.busy && !old.busy) {
+      _c.value = 0;
+      _c.animateTo(0.5, duration: const Duration(milliseconds: 380), curve: Curves.linear);
+    } else if (!widget.busy && old.busy) {
+      _leave();
+    }
+  }
+
+  Future<void> _leave() async {
+    if (_c.value < 0.5) await _c.animateTo(0.5, duration: const Duration(milliseconds: 160));
+    if (mounted) await _c.animateTo(1, duration: const Duration(milliseconds: 420), curve: Curves.linear);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(children: [
+      widget.child,
+      Positioned.fill(
+        child: IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) => _c.value >= 1 ? const SizedBox.shrink() : CustomPaint(painter: InkSweepPainter(_c.value)),
+          ),
+        ),
+      ),
+    ]);
+  }
+}

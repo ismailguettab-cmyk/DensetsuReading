@@ -56,8 +56,8 @@ class _ShellState extends State<Shell> {
   final _visited = <int>{0};
   final _navigators = List.generate(_tabs.length, (_) => GlobalKey<NavigatorState>());
 
-  /// Bumped each time Home comes back into view, so its entrance plays again.
-  final _homeVisit = ValueNotifier(0);
+  /// Bumped each time a tab comes back into view: its page is rebuilt, so its entrance plays again.
+  final _visits = List.generate(_tabs.length, (_) => ValueNotifier(0));
 
   void _select(int i) {
     if (i == _index) {
@@ -65,7 +65,7 @@ class _ShellState extends State<Shell> {
       _navigators[i].currentState?.popUntil((r) => r.isFirst);
       return;
     }
-    if (i == 0) _homeVisit.value++;
+    _visits[i].value++;
     setState(() {
       _index = i;
       _current.value = i;
@@ -74,11 +74,13 @@ class _ShellState extends State<Shell> {
     if (i == 1) Services.i.reco.onVisit();
   }
 
-  Widget _page(int i) => switch (i) {
-        0 => ValueListenableBuilder(
-            valueListenable: _homeVisit,
-            builder: (_, visit, _) => HomePage(key: ValueKey(visit)),
-          ),
+  Widget _page(int i) => ValueListenableBuilder(
+        valueListenable: _visits[i],
+        builder: (_, visit, _) => KeyedSubtree(key: ValueKey(visit), child: _root(i)),
+      );
+
+  Widget _root(int i) => switch (i) {
+        0 => const HomePage(),
         1 => const RecoPage(),
         2 => const SearchPage(),
         3 => const SourcesPage(),

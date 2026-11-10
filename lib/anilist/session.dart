@@ -114,6 +114,20 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Marks the manga as completed on AniList (all chapters read when the count is known).
+  Future<bool> markCompleted(AniMedia media) async {
+    if (!canWrite) return false;
+    final current = entryFor(media.id);
+    final progress = media.chapters ?? current?.progress;
+    await api.saveEntry(media.id, status: 'COMPLETED', progress: progress);
+    entries = [
+      AniEntry(media: current?.media ?? media, status: 'COMPLETED', score: current?.score ?? 0, progress: progress ?? 0, updated: DateTime.now()),
+      ...entries.where((e) => e.media.id != media.id),
+    ];
+    notifyListeners();
+    return true;
+  }
+
   Future<bool> addToPlan(AniMedia media) async {
     if (!canWrite) return false;
     await api.saveEntry(media.id, status: 'PLANNING');

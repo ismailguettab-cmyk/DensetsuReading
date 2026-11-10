@@ -338,8 +338,6 @@ class _ShelfState extends State<_Shelf> with SingleTickerProviderStateMixin {
                     child: CoverImage(url: face.media.cover, radius: 0, title: face.media.title),
                   ),
                 ),
-                if (widget.shelf == LibraryShelf.read)
-                  Positioned(right: -10, bottom: 8, child: HankoStamp(delay: const Duration(milliseconds: 1300))),
                 if (widget.shelf == LibraryShelf.reading)
                   const Positioned(right: 14, top: -12, width: 18, height: 56, child: BrushShape(Brush.ribbon, color: inkRed)),
                 if (widget.shelf == LibraryShelf.planning)
@@ -403,12 +401,12 @@ class _ShelfState extends State<_Shelf> with SingleTickerProviderStateMixin {
   }
 }
 
-/// The five manga touched last (AniList list, newest first), finished ones sealed with 読了.
+/// The last five manga finished (AniList list, newest first), each sealed with 読了.
 class _RecentReads extends StatelessWidget {
   const _RecentReads({required this.pad});
   final double pad;
 
-  static const _shown = {'CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED'};
+  static const _shown = {'COMPLETED', 'REPEATING'};
 
   @override
   Widget build(BuildContext context) {

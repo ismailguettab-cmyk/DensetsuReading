@@ -51,9 +51,9 @@ class _RecoBookPageState extends State<RecoBookPage> {
     setState(() => _reloading = true);
     await Services.i.reco.redrawRow(widget.rowKey);
     if (!mounted) return;
+    // The new picks are in place under the ink; the strokes leave as _reloading drops.
     setState(() {
       _reloading = false;
-      _dir = -1;
       _spread = 0;
     });
   }
@@ -178,8 +178,12 @@ class _RecoBookPageState extends State<RecoBookPage> {
                     SizedBox(
                       width: spreadW,
                       height: spreadH,
-                      child: AnimatedSwitcher(
-                        duration: Motion.reduced(context) ? Duration.zero : const Duration(milliseconds: 550),
+                      // Reload: straight ink strokes cover the magazine, then wipe off onto the new picks.
+                      child: InkReload(
+                        busy: _reloading,
+                        child: AnimatedSwitcher(
+                        // No page turn when the picks change under the reload ink.
+                        duration: Motion.reduced(context) || _reloading ? Duration.zero : const Duration(milliseconds: 550),
                         switchInCurve: const Cubic(0.5, 0, 0.3, 1),
                         transitionBuilder: (child, a) => AnimatedBuilder(
                           animation: a,
@@ -196,6 +200,7 @@ class _RecoBookPageState extends State<RecoBookPage> {
                           Expanded(child: _MangaPage(items: page(_spread * 2 + 1), number: _spread * 2 + 2, left: true, sfx: bookSfx[row.key])),
                           Expanded(child: _MangaPage(items: page(_spread * 2), number: _spread * 2 + 1, left: false, sfx: bookSfx[row.key])),
                         ]),
+                      ),
                       ),
                     ),
                     const SizedBox(width: 22),
@@ -284,18 +289,40 @@ class _MangaPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
           child: LayoutBuilder(builder: (context, box) {
             final s = Size(box.maxWidth, box.maxHeight);
-            return Stack(children: [
-              for (var i = 0; i < items.length; i++)
-                Positioned.fill(
-                  child: _Panel(
-                    media: items[i],
-                    shape: [for (final o in _panels[i]) Offset(o.dx * s.width, o.dy * s.height)],
-                    big: i == 0,
-                    sfx: sfx ?? _sfx[(number + i) % _sfx.length],
-                    delay: Duration(milliseconds: 650 + (left ? 3 : 0) * 120 + i * 120),
-                  ),
+            final shapes = [
+              for (var i = 0; i < items.length; i++) [for (final o in _panels[i]) Offset(o.dx * s.width, o.dy * s.height)],
+            ];
+            // One tap handler for the whole page: the panel whose shape holds the finger opens.
+            // (Each panel covers the page and is only cut to shape when painted, so per-panel
+            // hit testing let one panel swallow every tap.)
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) {
+                  for (var i = 0; i < shapes.length; i++) {
+                    if ((Path()..addPolygon(shapes[i], true)).contains(d.localPosition)) {
+                      Navigator.of(context).push(SoftRoute(MangaPage.anilist(items[i])));
+                      return;
+                    }
+                  }
+                },
+                child: IgnorePointer(
+                  child: Stack(children: [
+                    for (var i = 0; i < items.length; i++)
+                      Positioned.fill(
+                        child: _Panel(
+                          media: items[i],
+                          shape: shapes[i],
+                          big: i == 0,
+                          sfx: sfx ?? _sfx[(number + i) % _sfx.length],
+                          delay: Duration(milliseconds: 650 + (left ? 3 : 0) * 120 + i * 120),
+                        ),
+                      ),
+                  ]),
                 ),
-            ]);
+              ),
+            );
           }),
         ),
         Positioned(
@@ -324,17 +351,7 @@ class _Panel extends StatelessWidget {
       Offset(shape.map((o) => o.dx).reduce(max), shape.map((o) => o.dy).reduce(max)),
     );
     final score = media.meanScore != null ? '★ ${(media.meanScore! / 10).toStringAsFixed(1).replaceAll('.', ',')}' : null;
-    // Every panel fills the whole page and is cut to its shape by the clip, so hits must go
-    // through the shape: an opaque mouse region here made the top panel catch every tap,
-    // and the whole page opened the same manga.
-    return GestureDetector(
-      behavior: HitTestBehavior.deferToChild,
-      onTap: () => Navigator.of(context).push(SoftRoute(MangaPage.anilist(media))),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        opaque: false,
-        hitTestBehavior: HitTestBehavior.deferToChild,
-        child: OneShot(
+    return OneShot(
           delay: delay,
           duration: const Duration(milliseconds: 800),
           builder: (context, t, child) {
@@ -357,31 +374,30 @@ class _Panel extends StatelessWidget {
                 ]),
               ),
               IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _PolyBorder(shape))),
+              // Small caption at the panel's foot: title and score only, so the cover stays visible.
               Positioned(
-                left: bounds.left + 12,
-                top: big ? bounds.bottom - 78 : bounds.top + 12,
+                left: bounds.left + 8,
+                top: bounds.bottom - (score != null ? 44 : 30),
                 child: Opacity(
                   opacity: color,
                   child: Container(
-                    constraints: BoxConstraints(maxWidth: bounds.width * 0.7),
-                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 7),
+                    constraints: BoxConstraints(maxWidth: bounds.width * (big ? 0.5 : 0.78)),
+                    padding: const EdgeInsets.fromLTRB(7, 3, 7, 4),
                     decoration: const BoxDecoration(
                       color: Color(0xFFFBF8F1),
-                      border: Border.fromBorderSide(BorderSide(color: inkBlack, width: 2)),
-                      boxShadow: [BoxShadow(color: inkBlack, offset: Offset(3, 3))],
+                      border: Border.fromBorderSide(BorderSide(color: inkBlack, width: 1.5)),
+                      boxShadow: [BoxShadow(color: inkBlack, offset: Offset(2, 2))],
                     ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Text(media.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Txt.h2(context).copyWith(fontSize: big ? 20 : 15, height: 1.05)),
-                      Text([?score, ...media.genres.take(2)].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.caption(context).copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: context.pal.text2)),
+                      Text(media.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.label(context).copyWith(fontSize: big ? 13 : 11.5, height: 1.15)),
+                      if (score != null) Text(score, style: Txt.caption(context).copyWith(fontSize: 10.5, fontWeight: FontWeight.w700, color: inkRed, height: 1.2)),
                     ]),
                   ),
                 ),
               ),
             ]);
           },
-        ),
-      ),
-    );
+        );
   }
 }
 

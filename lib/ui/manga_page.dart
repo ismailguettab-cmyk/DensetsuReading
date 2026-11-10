@@ -72,7 +72,8 @@ class _MangaPageState extends State<MangaPage> {
     }
     final aniId = widget.ani?.id ?? widget.resume?.anilistId;
     if (aniId != null) _loadAni(aniId, summary: true);
-    if (widget.ani == null) _probeAll();
+    // Check every installed source right away (green dot = it has this manga).
+    _probeAll();
     _loadSource();
   }
 
@@ -80,9 +81,13 @@ class _MangaPageState extends State<MangaPage> {
     try {
       final media = await Services.i.session.api.media(id);
       if (!mounted) return;
-      final first = _ani == null || _probes.isEmpty;
+      // Opened from a source: now that AniList's titles are known, look again with them.
+      final retry = widget.ani == null && _ani == null;
       setState(() => _ani = media);
-      if (first) _probeAll();
+      if (retry) {
+        _probes.removeWhere((id, _) => _availability[id] == null);
+        _probeAll();
+      }
       if (!summary) return;
       _summaryEn ??= media.description;
       final fr = await MangaDex.descriptionFor(id, media.searchTitles, 'fr').catchError((_) => null);
@@ -213,15 +218,21 @@ class _MangaPageState extends State<MangaPage> {
         _checked.add(s.id);
         continue;
       }
-      _find(s).then((m) {
-        if (mounted) setState(() => _checked.add(s.id));
-      });
+      _find(s);
     }
   }
 
+  /// One lookup per source, shared by the availability dots and the chapter loading.
+  /// Each source is marked checked as soon as its own answer arrives (even on failure).
   Future<SourceManga?> _find(MangaSource source) => _probes[source.id] ??= _findInSource(source, _titles, aniId: _ani?.id)
-      .then<SourceManga?>((m) => _availability[source.id] = m)
-      .catchError((Object _) => _availability[source.id] = null);
+          .timeout(const Duration(seconds: 25))
+          .then<SourceManga?>((m) => m, onError: (Object _) => null)
+          .then((m) {
+        _availability[source.id] = m;
+        _checked.add(source.id);
+        if (mounted) setState(() {});
+        return m;
+      });
 
   /// Search results per source, offered when the user picks the match by hand.
   final _candidatesBySource = <String, List<SourceManga>>{};
@@ -302,11 +313,29 @@ class _MangaPageState extends State<MangaPage> {
         builder: (context, _) => LayoutBuilder(builder: (context, box) {
           final wide = box.maxWidth >= 860;
           final pad = pagePadding(context);
-          final scroll = CustomScrollView(slivers: [
+          // The main character, inked on a red sun, belongs to the page's head: it scrolls
+          // away with the title instead of following the chapter list. Scaled to the width.
+          final portraitW = min(360.0, box.maxWidth * 0.3);
+          final portrait = wide && _ani != null
+              ? Positioned(
+                  right: -pad.right,
+                  top: -(pad.top - 8),
+                  width: portraitW,
+                  height: portraitW * 330 / 360,
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: FittedBox(fit: BoxFit.contain, alignment: Alignment.topRight, child: SizedBox(width: 430, height: 372, child: InkPortrait(mediaId: _ani!.id))),
+                    ),
+                  ),
+                )
+              : null;
+          return CustomScrollView(slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(pad.left, pad.top - 8, pad.right, 0),
               sliver: SliverToBoxAdapter(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                child: Stack(clipBehavior: Clip.none, children: [
+                  ?portrait,
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   IconCircle(icon: Icons.arrow_back_rounded, onTap: () => Navigator.of(context).maybePop(), tooltip: context.t('common.back')),
                   const SizedBox(height: 24),
                   wide
@@ -329,27 +358,11 @@ class _MangaPageState extends State<MangaPage> {
                   const SizedBox(height: 38),
                   _chaptersHeader(context),
                 ]),
+                ]),
               ),
             ),
             ..._chapterSlivers(context, pad),
             SliverToBoxAdapter(child: SizedBox(height: pad.bottom + 20)),
-          ]);
-          if (!wide || _ani == null) return scroll;
-          // The main character, inked on a red sun, pinned to the top-right corner: it sits
-          // above the list and stays put while the chapters scroll underneath.
-          return Stack(children: [
-            scroll,
-            Positioned(
-              right: 0,
-              top: 0,
-              width: 360,
-              height: 330,
-              child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: FittedBox(fit: BoxFit.contain, alignment: Alignment.topRight, child: SizedBox(width: 430, height: 372, child: InkPortrait(mediaId: _ani!.id))),
-                ),
-              ),
-            ),
           ]);
         }),
       ),
@@ -524,8 +537,12 @@ class _MangaPageState extends State<MangaPage> {
           ]),
         ),
       ),
-      if (ani != null && session.canWrite) ...[
+      if (ani != null) ...[
         const SizedBox(height: 16),
+        _CompleteButton(media: ani),
+      ],
+      if (ani != null && session.canWrite) ...[
+        const SizedBox(height: 12),
         Pressable(
           onTap: inList ? null : () => session.addToPlan(ani),
           child: Container(
@@ -738,6 +755,7 @@ class _MangaPageState extends State<MangaPage> {
 
     final progress = _ani == null ? 0 : (Services.i.session.entryFor(_ani!.id)?.progress ?? 0);
     final lastUrl = _lastRead?.chapterUrl;
+    final lastNumber = chapters.where((c) => c.url == lastUrl).firstOrNull?.number;
     final order = List.generate(chapters.length, (i) => i);
     if (_newestFirst) order.setAll(0, order.reversed.toList());
 
@@ -755,11 +773,16 @@ class _MangaPageState extends State<MangaPage> {
           ));
         }
       }
-      final read = (c.number != null && c.number! <= progress) ;
+      // Read: up to the AniList progress, or before the chapter last opened in the app.
+      final read = c.number != null && (c.number! <= progress || (lastNumber != null && c.number! < lastNumber));
+      final shown = rows.length;
       rows.add(_ChapterRow(
         chapter: c,
         read: read,
         current: c.url == lastUrl,
+        page: c.url == lastUrl ? (_lastRead?.page ?? 0) + 1 : null,
+        // The first rows on screen get their slash one after another; further down, at once.
+        slashDelay: Duration(milliseconds: shown < 14 ? 420 + 40 * shown : 0),
         onTap: () => _openReader(i, page: c.url == lastUrl ? (_lastRead?.page ?? 0) : 0),
       ));
     }
@@ -772,12 +795,17 @@ class _MangaPageState extends State<MangaPage> {
   }
 }
 
+/// A chapter line. Read ones are struck through by a black brush stroke that sweeps in
+/// (board "Manga": .18 s, cubic-bezier(.95,0,.2,1)); the one in progress carries
+/// "Reprendre · p. X" on an ink blot.
 class _ChapterRow extends StatelessWidget {
-  const _ChapterRow({required this.chapter, required this.read, required this.current, required this.onTap});
+  const _ChapterRow({required this.chapter, required this.read, required this.current, required this.onTap, this.page, this.slashDelay = Duration.zero});
 
   final Chapter chapter;
   final bool read, current;
   final VoidCallback onTap;
+  final int? page;
+  final Duration slashDelay;
 
   @override
   Widget build(BuildContext context) {
@@ -801,18 +829,131 @@ class _ChapterRow extends StatelessWidget {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(chapter.name, style: Txt.title(context).copyWith(color: read ? p.text3 : p.text)),
+                Stack(clipBehavior: Clip.none, children: [
+                  Text(chapter.name, style: Txt.title(context).copyWith(color: read ? p.text3 : p.text)),
+                  if (read && !current)
+                    Positioned(
+                      left: -4,
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Transform.rotate(
+                          angle: -0.8 * pi / 180,
+                          child: PaintReveal(
+                            delay: slashDelay,
+                            duration: const Duration(milliseconds: 180),
+                            curve: const Cubic(0.95, 0, 0.2, 1),
+                            child: const SizedBox(height: 12, width: double.infinity, child: BrushShape(Brush.divider)),
+                          ),
+                        ),
+                      ),
+                    ),
+                ]),
                 if (sub.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.caption(context)),
                 ],
               ]),
             ),
-            if (current) Pill(context.isEn ? 'Reading' : 'En cours', icon: Icons.play_arrow_rounded),
-            if (read && !current) Icon(Icons.check_rounded, size: 18, color: p.text3),
+            if (current) _ResumeBlot(page: page),
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// "Add as completed on my AniList": sets the manga to COMPLETED on the account; once done,
+/// the button turns ink black and the 読了 seal lands on it.
+class _CompleteButton extends StatefulWidget {
+  const _CompleteButton({required this.media});
+  final AniMedia media;
+
+  @override
+  State<_CompleteButton> createState() => _CompleteButtonState();
+}
+
+class _CompleteButtonState extends State<_CompleteButton> {
+  bool _busy = false;
+  bool _justDone = false;
+
+  Future<void> _complete() async {
+    final session = Services.i.session;
+    if (!session.canWrite) {
+      toast(context, context.isEn ? 'Sign in with AniList (not a username) to change your list.' : 'Connecte-toi avec AniList (pas avec un pseudo) pour modifier ta liste.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await session.markCompleted(widget.media);
+      if (mounted) setState(() => _justDone = true);
+    } catch (_) {
+      if (mounted) toast(context, context.isEn ? 'AniList didn’t answer. Try again.' : 'AniList ne répond pas. Réessaie.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = Services.i.session.entryFor(widget.media.id)?.status;
+    final done = status == 'COMPLETED' || status == 'REPEATING';
+    final en = context.isEn;
+    return Stack(clipBehavior: Clip.none, children: [
+      Pressable(
+        onTap: done || _busy ? null : _complete,
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: done ? inkBlack : const Color(0xFFFBF8F1),
+            border: Border.all(color: inkBlack, width: 2),
+            boxShadow: done ? null : const [BoxShadow(color: inkRed, offset: Offset(4, 4))],
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (_busy)
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: inkBlack))
+            else
+              Icon(done ? Icons.check_rounded : Icons.done_all_rounded, size: 18, color: done ? inkPaper : inkBlack),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                done
+                    ? (en ? 'Completed on AniList' : 'Complété sur AniList')
+                    : (en ? 'Add as completed on my AniList' : 'Ajouter comme complété sur mon AniList'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Txt.label(context).copyWith(color: done ? inkPaper : inkBlack),
+              ),
+            ),
+            if (done) const SizedBox(width: 26),
+          ]),
+        ),
+      ),
+      if (done) Positioned(right: -16, top: -12, child: HankoStamp(size: 48, animate: _justDone)),
+    ]);
+  }
+}
+
+/// "Reprendre · p. 12" in paper-coloured letters on a black brush blot.
+class _ResumeBlot extends StatelessWidget {
+  const _ResumeBlot({this.page});
+  final int? page;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = '${context.isEn ? 'Resume' : 'Reprendre'}${page != null ? ' · p. $page' : ''}';
+    return PaintReveal(
+      delay: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 220),
+      child: Stack(children: [
+        const Positioned.fill(child: BrushShape(Brush.sweepRight)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 16, 5),
+          child: Text(label, style: Txt.tag(context).copyWith(color: inkPaper, fontSize: 12)),
+        ),
+      ]),
     );
   }
 }

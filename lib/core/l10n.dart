@@ -10,7 +10,7 @@ const _fr = <String, String>{
   'nav.settings': 'Paramètres',
 
   'login.title': 'La weeberie\nsans limite.',
-  'login.unavailable': 'La connexion AniList arrive très bientôt. En attendant, continue avec ton pseudo AniList.',
+  'login.unavailable': 'La connexion AniList n’est pas encore configurée sur cette version. Continue avec ton pseudo AniList en attendant.',
   'login.subtitle': 'Connecte ton compte AniList : ton profil, ta progression et tes recommandations te suivent.',
   'login.anilist': 'Se connecter avec AniList',
   'login.username': 'Continuer avec un pseudo AniList',
@@ -186,7 +186,7 @@ const _en = <String, String>{
   'nav.settings': 'Settings',
 
   'login.title': 'Weeb life,\nwithout limits.',
-  'login.unavailable': 'AniList sign-in is coming very soon. Meanwhile, continue with your AniList username.',
+  'login.unavailable': 'AniList sign-in isn’t set up on this version yet. Continue with your AniList username meanwhile.',
   'login.subtitle': 'Connect your AniList account: your profile, progress and recommendations follow you.',
   'login.anilist': 'Sign in with AniList',
   'login.username': 'Continue with an AniList username',

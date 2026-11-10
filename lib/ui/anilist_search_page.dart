@@ -124,17 +124,40 @@ class _SearchPageState extends State<SearchPage> {
   bool get _filtered =>
       _status != null || _audience != null || _country != null || _format != null || _genresOn.isNotEmpty || _minScore != null || _year != null;
 
+  /// The page is rebuilt each time the tab comes back (so its entrance replays):
+  /// the search, filters and results are kept here in between.
+  static _SearchPageState? _last;
+  String _savedQuery = '';
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(() {
       if (_scroll.position.extentAfter < 900) _load();
     });
-    _reset();
+    final last = _last;
+    if (last != null && last._items.isNotEmpty) {
+      _query.text = last._savedQuery;
+      _status = last._status;
+      _audience = last._audience;
+      _country = last._country;
+      _format = last._format;
+      _genresOn.addAll(last._genresOn);
+      _minScore = last._minScore;
+      _year = last._year;
+      _sort = last._sort;
+      _items.addAll(last._items);
+      _page = last._page;
+      _hasNext = last._hasNext;
+    } else {
+      _reset();
+    }
   }
 
   @override
   void dispose() {
+    _savedQuery = _query.text;
+    _last = this;
     _debounce?.cancel();
     _scroll.dispose();
     _query.dispose();
@@ -637,7 +660,18 @@ class _ResultCard extends StatelessWidget {
               if (inList?.status == 'COMPLETED' || inList?.status == 'REPEATING')
                 const Positioned(right: -8, bottom: -6, child: HankoStamp(size: 40, animate: false))
               else if (inList != null)
-                Positioned(left: -6, top: 10, child: InkTag(context.isEn ? 'ON MY LIST' : 'DANS MA LISTE', angle: -4 * pi / 180)),
+                Positioned(
+                  left: -4,
+                  top: 12,
+                  child: Transform.rotate(
+                    angle: -4 * pi / 180,
+                    child: InkStretchTag(
+                      context.isEn ? 'ON MY LIST' : 'DANS MA LISTE',
+                      delay: (delay ?? Duration.zero) + const Duration(milliseconds: 320),
+                      animate: delay != null,
+                    ),
+                  ),
+                ),
             ]),
           ),
           const SizedBox(height: 10),

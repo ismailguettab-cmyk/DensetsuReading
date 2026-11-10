@@ -36,11 +36,10 @@ jobs:
       # Erreurs et avertissements bloquent ; les simples conseils de style non.
       - run: flutter analyze --no-fatal-infos
 
-      # Identifiants publics des clients AniList (variables du dépôt, facultatives).
       # Signé avec la clé de debug (suffisant pour installer sur sa propre tablette).
+      # BUILD_SHA : version de l'APK, comparée à GitHub par « Mettre à jour » dans les Paramètres.
       - run: >
           flutter build apk --release --no-tree-shake-icons
-          --dart-define=ANILIST_APP_ID=${{ vars.ANILIST_APP_ID }}
           --dart-define=BUILD_SHA=${{ github.sha }}
 
       - name: Renommer l'APK

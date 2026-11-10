@@ -200,8 +200,7 @@ class AniList {
   /// The app's AniList clients (public IDs, "implicit grant": no secret in the app).
   /// One per return address, as AniList allows a single redirect URL per client:
   /// the tablet app comes back through `densetsureading://auth`, the website through its own page.
-  /// They can also be given at build time (`--dart-define=ANILIST_APP_ID=…`).
-  static const appClientId = String.fromEnvironment('ANILIST_APP_ID', defaultValue: '');
+  static const appClientId = '55950';
   static const webClientId = String.fromEnvironment('ANILIST_WEB_ID', defaultValue: '');
   static const appCallbackScheme = 'densetsureading';
 
