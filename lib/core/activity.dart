@@ -83,6 +83,7 @@ class Activity extends ChangeNotifier {
         ViewEvent(v['t'] as String, (v['g'] as List).cast<String>(), DateTime.fromMillisecondsSinceEpoch(v['at'] as int)),
     ];
     reads = [for (final r in (j['reads'] as List? ?? const [])) ReadEvent.fromJson(r as Map<String, dynamic>)];
+    cleared = {for (final id in (j['cleared'] as List? ?? const [])) id as int};
   }
 
   static const _key = 'activity.v1';
@@ -105,8 +106,22 @@ class Activity extends ChangeNotifier {
     _save();
   }
 
+  /// AniList ids whose chapter marks were cleared on the manga page: their AniList progress
+  /// is not shown as read until a chapter is opened again.
+  Set<int> cleared = {};
+
+  bool marksCleared(int anilistId) => cleared.contains(anilistId);
+
   void logRead(ReadEvent event) {
     reads = [event, ...reads.where((r) => r.key != event.key)].take(100).toList();
+    if (event.anilistId != null) cleared.remove(event.anilistId);
+    _save();
+  }
+
+  /// Forgets where the user was in this manga (all sources) and hides its read marks.
+  void clearMarks({String? sourceId, String? mangaUrl, int? anilistId}) {
+    reads = reads.where((r) => !((anilistId != null && r.anilistId == anilistId) || (r.sourceId == sourceId && r.mangaUrl == mangaUrl))).toList();
+    if (anilistId != null) cleared.add(anilistId);
     _save();
   }
 
@@ -130,6 +145,7 @@ class Activity extends ChangeNotifier {
         'searches': [for (final s in searches) {'q': s.query, 'at': s.at.millisecondsSinceEpoch}],
         'views': [for (final v in views) {'t': v.title, 'g': v.genres, 'at': v.at.millisecondsSinceEpoch}],
         'reads': [for (final r in reads) r.toJson()],
+        'cleared': cleared.toList(),
       }),
     );
     notifyListeners();

@@ -439,26 +439,39 @@ class InkStretchTag extends StatelessWidget {
         final thick = 1 + 0.35 * (1 - (t / 0.7).clamp(0.0, 1.0));
         final words = Curves.easeOut.transform(((t - 0.45) / 0.55).clamp(0.0, 1.0));
         return Stack(children: [
+          // A full brush blot (not a tapered stroke), a little larger than the words.
           Positioned(
-            left: -8,
-            right: -10,
-            top: -5,
-            bottom: -5,
+            left: -4,
+            right: -5,
+            top: -3,
+            bottom: -3,
             child: Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.diagonal3Values(max(0.02, stretch), thick, 1),
-              child: const BrushShape(Brush.sweepRight),
+              child: const CustomPaint(painter: _BlotPainter()),
             ),
           ),
           Opacity(opacity: words, child: Transform.translate(offset: Offset(-6 * (1 - words), 0), child: child)),
         ]);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Text(text, style: Txt.tag(context).copyWith(color: Colors.white, fontSize: 11, letterSpacing: 1.2)),
+        padding: const EdgeInsets.fromLTRB(9, 3, 9, 4),
+        child: Text(text, style: Txt.tag(context).copyWith(color: Colors.white, fontSize: 8.5, letterSpacing: 0.8, height: 1.2)),
       ),
     );
   }
+}
+
+/// Wide ink blot with dry, uneven ends (same shape as the sign-in button).
+class _BlotPainter extends CustomPainter {
+  const _BlotPainter();
+  static const _d = 'M6 12C40 2 150 0 214 8c6 14 6 32 0 42-60 8-160 8-208 0C0 38 0 22 6 12z';
+
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawPath(scaledPath(_d, const Size(220, 58), size), Paint()..color = inkBlack);
+
+  @override
+  bool shouldRepaint(_BlotPainter old) => false;
 }
 
 /// A cover laid down on three brush strokes (two black, one red) with ink drops,

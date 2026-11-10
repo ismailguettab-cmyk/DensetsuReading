@@ -295,7 +295,9 @@ class _MangaPageState extends State<MangaPage> {
       reverseTransitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, __, ___) => ReaderPage(
         source: source,
-        manga: match.cover == null ? match.copyWith(cover: _cover) : match,
+        // The cover kept in the reading history: AniList's manga cover when known (some
+        // sources show the anime poster).
+        manga: _ani?.cover != null ? match.copyWith(cover: _ani!.cover) : (match.cover == null ? match.copyWith(cover: _cover) : match),
         chapters: chapters,
         index: index,
         startPage: page,
@@ -675,6 +677,19 @@ class _MangaPageState extends State<MangaPage> {
     ]);
   }
 
+  /// True when at least one chapter carries an ink mark (read or in progress).
+  bool get _hasMarks {
+    final ani = _ani;
+    final aniProgress = ani == null || Services.i.activity.marksCleared(ani.id) ? 0 : (Services.i.session.entryFor(ani.id)?.progress ?? 0);
+    return _lastRead != null || aniProgress > 0;
+  }
+
+  void _clearMarks() {
+    final source = _source, match = _match;
+    Services.i.activity.clearMarks(sourceId: source?.id, mangaUrl: match?.url, anilistId: _ani?.id);
+    toast(context, context.isEn ? 'Marks cleared' : 'Marques effacées');
+  }
+
   Widget _chaptersHeader(BuildContext context) {
     final count = _chapters?.length;
     Widget tab(String label, bool active, VoidCallback onTap) => Pressable(
@@ -696,6 +711,24 @@ class _MangaPageState extends State<MangaPage> {
         tab(context.t('detail.volumes'), _volumes, () => setState(() => _volumes = true)),
         if (count != null) ...[const SizedBox(width: 14), Text('$count', style: Txt.label(context).copyWith(color: context.pal.text3))],
         const Spacer(),
+        // Wipes the ink marks (chapter opened by mistake): forgets the in-app history for this
+        // manga and stops showing the AniList progress until the next chapter is read.
+        if (count != null && count > 0 && _hasMarks) ...[
+          Pressable(
+            onTap: _clearMarks,
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2)),
+              child: Row(children: [
+                const Icon(Icons.cleaning_services_rounded, size: 16, color: inkBlack),
+                const SizedBox(width: 6),
+                Text(context.isEn ? 'Clear' : 'Effacer', style: Txt.label(context)),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
         if (count != null && count > 0)
           Pressable(
             onTap: () => setState(() => _newestFirst = !_newestFirst),
@@ -753,7 +786,7 @@ class _MangaPageState extends State<MangaPage> {
     }
     if (chapters.isEmpty) return [boxed(Text(context.t('detail.noChapters'), style: Txt.body(context)))];
 
-    final progress = _ani == null ? 0 : (Services.i.session.entryFor(_ani!.id)?.progress ?? 0);
+    final progress = _ani == null || Services.i.activity.marksCleared(_ani!.id) ? 0 : (Services.i.session.entryFor(_ani!.id)?.progress ?? 0);
     final lastUrl = _lastRead?.chapterUrl;
     final lastNumber = chapters.where((c) => c.url == lastUrl).firstOrNull?.number;
     final order = List.generate(chapters.length, (i) => i);
@@ -844,7 +877,7 @@ class _ChapterRow extends StatelessWidget {
                             delay: slashDelay,
                             duration: const Duration(milliseconds: 180),
                             curve: const Cubic(0.95, 0, 0.2, 1),
-                            child: const SizedBox(height: 12, width: double.infinity, child: BrushShape(Brush.divider)),
+                            child: const SizedBox(height: 4, width: double.infinity, child: BrushShape(Brush.divider)),
                           ),
                         ),
                       ),
@@ -921,7 +954,7 @@ class _CompleteButtonState extends State<_CompleteButton> {
               child: Text(
                 done
                     ? (en ? 'Completed on AniList' : 'Complété sur AniList')
-                    : (en ? 'Add as completed on my AniList' : 'Ajouter comme complété sur mon AniList'),
+                    : (en ? 'Mark as completed' : 'Marquer comme terminé'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Txt.label(context).copyWith(color: done ? inkPaper : inkBlack),

@@ -81,10 +81,12 @@ class _Resume {
   static _Resume? pick(BuildContext context, ReadEvent? read, AniEntry? reading) {
     if (read != null) {
       final source = sourceById(read.sourceId);
+      // The manga's own cover from AniList: sources sometimes show the anime poster instead.
+      final aniCover = read.anilistId == null ? null : Services.i.session.entryFor(read.anilistId!)?.media.cover;
       return _Resume(
         title: read.title,
-        cover: read.cover,
-        headers: source?.imageHeaders ?? const {},
+        cover: aniCover ?? (read.anilistId == null ? read.cover : null),
+        headers: aniCover != null ? const {} : source?.imageHeaders ?? const {},
         sub: '${context.isEn ? 'Read' : 'Lu'} ${context.ago(read.at)}${source != null ? ' · ${source.name}' : ''}',
         line: '${read.chapterName} · ${context.t('reader.page').toLowerCase()} ${read.page + 1}${read.total != null ? ' / ${read.total}' : ''}',
         page: read.page + 1,
@@ -172,9 +174,19 @@ class _ResumeBlock extends StatelessWidget {
   final _Resume resume;
   final bool compact;
 
+  static final _aniCovers = <int, Future<String?>>{};
+
   @override
   Widget build(BuildContext context) {
-    final cover = BrushCover(cover: resume.cover, headers: resume.headers, title: resume.title, width: compact ? 150 : 206);
+    final width = compact ? 150.0 : 206.0;
+    final id = resume.anilistId;
+    // Not on the AniList list: ask AniList for the manga's cover (once per manga).
+    final cover = resume.cover == null && id != null
+        ? FutureBuilder<String?>(
+            future: _aniCovers[id] ??= Services.i.session.api.media(id).then<String?>((m) => m.cover).catchError((Object _) => null),
+            builder: (context, snap) => BrushCover(key: ValueKey(snap.data), cover: snap.data, title: resume.title, width: width),
+          )
+        : BrushCover(cover: resume.cover, headers: resume.headers, title: resume.title, width: width);
 
     final info = OneShot(
       delay: const Duration(milliseconds: 450),
