@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import '../core/net.dart';
 import '../core/services.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
+import '../core/upscale.dart';
 import '../sources/source.dart';
 import '../translate/overlay.dart';
 import '../translate/translator.dart';
@@ -70,6 +72,10 @@ class _ReaderPageState extends State<ReaderPage> {
 
   bool _chrome = true;
   Timer? _hideChrome;
+
+  bool _upscale = false;
+  final _upscaled = <String, Uint8List?>{}; // null: page already sharp, or couldn't be enhanced
+  final _upscaling = <String>{};
 
   bool _translate = false;
   final _translations = <String, List<Bubble>>{};
@@ -268,6 +274,7 @@ class _ReaderPageState extends State<ReaderPage> {
     if (_units[i].isEnd || (i == _units.length - 2)) _markRead();
     _logRead();
     if (_translate) _translateAround();
+    _upscaleAround();
   }
 
   void _go(int delta, {bool animate = true}) {
@@ -381,6 +388,41 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   // ------------------------------------------------------------ translation
+
+  // ---------------------------------------------------------------- upscale
+
+  void _toggleUpscale() {
+    setState(() => _upscale = !_upscale);
+    if (_upscale) _upscaleAround();
+  }
+
+  /// Enhances what's on screen and the next screen. Pages already sharp enough are left
+  /// exactly as they are (the original file is still what's shown).
+  void _upscaleAround() {
+    if (!_upscale || _units.isEmpty) return;
+    final targets = <int>[];
+    if (_vertical_) {
+      for (var i = _page; i < _pages.length && i < _page + 3; i++) {
+        targets.add(i);
+      }
+    } else {
+      for (var u = _unit; u < _units.length && u <= _unit + 1; u++) {
+        targets.addAll(_units[u].pages);
+      }
+    }
+    for (final i in targets) {
+      final page = _pages[i];
+      if (_upscaled.containsKey(page.url) || _upscaling.contains(page.url)) continue;
+      setState(() => _upscaling.add(page.url));
+      Upscaler.page(page.url, page.headers).then((bytes) {
+        if (!mounted) return;
+        setState(() {
+          _upscaling.remove(page.url);
+          _upscaled[page.url] = bytes;
+        });
+      });
+    }
+  }
 
   void _toggleTranslate() {
     if (!Services.i.translator.ready) {
@@ -508,11 +550,12 @@ class _ReaderPageState extends State<ReaderPage> {
     );
     final screenAspect = viewport.width / viewport.height;
     final tall = total < screenAspect;
-    // Double-page reading covers the whole screen, edge to edge, never scrolling:
-    // the gap is closed first by widening the pages a little (at most 5 %, too little to
-    // see), then whatever is still too tall is trimmed evenly at the top and bottom.
+    // Double-page reading fills the screen, never scrolling and never cutting anything off:
+    // the pages are widened (or heightened) to the screen's shape, up to 16 %; only a spread
+    // further off than that keeps thin bands. Pixels are not resampled down: the full-size
+    // page is drawn straight at screen size.
     if (_lastDouble == true && fit == PageFit.fill) {
-      const maxStretch = 1.05; // barely visible; the rest is trimmed rather than distorted
+      const maxStretch = 1.16;
       final ratio = screenAspect / total; // > 1: pages narrower than the screen
       final sx = ratio > 1 ? min(ratio, maxStretch) : 1.0;
       final sy = ratio < 1 ? min(1 / ratio, maxStretch) : 1.0;
@@ -520,7 +563,7 @@ class _ReaderPageState extends State<ReaderPage> {
         index,
         SizedBox.expand(
           child: FittedBox(
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
             clipBehavior: Clip.hardEdge,
             child: SizedBox(
               width: 1000 * total * sx,
@@ -576,9 +619,11 @@ class _ReaderPageState extends State<ReaderPage> {
   Widget _pageImage(int i) {
     final page = _pages[i];
     final bubbles = _translate ? _translations[page.url] : null;
+    final enhanced = _upscale ? _upscaled[page.url] : null;
     return Stack(fit: StackFit.expand, children: [
       Image(
-        image: _provider(i),
+        // Upscale on and the page enhanced: its sharper copy; otherwise the original file.
+        image: enhanced != null ? MemoryImage(enhanced) : _provider(i),
         fit: BoxFit.fill, // the box already has the page's exact proportions
         gaplessPlayback: true,
         // High: bicubic resampling, the sharpest when a page is scaled to the screen.
@@ -662,6 +707,7 @@ class _ReaderPageState extends State<ReaderPage> {
           setState(() => _page = page);
           if (page == _pages.length - 1) _markRead();
           if (_translate) _translateAround();
+          _upscaleAround();
         }
         return false;
       },
@@ -781,6 +827,25 @@ class _ReaderPageState extends State<ReaderPage> {
                         _translate ? (translating ? context.t('reader.translating') : context.t('reader.translated')) : 'FR',
                         style: Txt.label(context).copyWith(color: _translate ? p.bg : p.text),
                       ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Upscale: off unless tapped. Pixelated pages are enlarged and sharpened.
+                Pressable(
+                  onTap: _toggleUpscale,
+                  child: AnimatedContainer(
+                    duration: Motion.fast,
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(color: _upscale ? p.accent : p.surface2, borderRadius: BorderRadius.circular(99)),
+                    child: Row(children: [
+                      if (_upscale && _upscaling.isNotEmpty)
+                        SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: p.bg))
+                      else
+                        Icon(Icons.auto_awesome_rounded, size: 18, color: _upscale ? p.bg : p.text),
+                      const SizedBox(width: 8),
+                      Text('Upscale', style: Txt.label(context).copyWith(color: _upscale ? p.bg : p.text)),
                     ]),
                   ),
                 ),

@@ -675,7 +675,11 @@ class _ResultCard extends StatelessWidget {
             ]),
           ),
           const SizedBox(height: 10),
-          Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Txt.label(context).copyWith(fontSize: 14, height: 1.2)),
+          // Always two lines' room, so a long title never shrinks the cover above it.
+          SizedBox(
+            height: 34,
+            child: Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Txt.label(context).copyWith(fontSize: 14, height: 1.2)),
+          ),
           const SizedBox(height: 3),
           Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: Txt.caption(context).copyWith(fontSize: 12)),
         ]),
