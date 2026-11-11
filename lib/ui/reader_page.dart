@@ -509,10 +509,10 @@ class _ReaderPageState extends State<ReaderPage> {
     final screenAspect = viewport.width / viewport.height;
     final tall = total < screenAspect;
     // Double-page reading covers the whole screen, edge to edge, never scrolling:
-    // the gap is closed first by widening the pages a little (at most 12 %, too little to
+    // the gap is closed first by widening the pages a little (at most 5 %, too little to
     // see), then whatever is still too tall is trimmed evenly at the top and bottom.
     if (_lastDouble == true && fit == PageFit.fill) {
-      const maxStretch = 1.12;
+      const maxStretch = 1.05; // barely visible; the rest is trimmed rather than distorted
       final ratio = screenAspect / total; // > 1: pages narrower than the screen
       final sx = ratio > 1 ? min(ratio, maxStretch) : 1.0;
       final sy = ratio < 1 ? min(1 / ratio, maxStretch) : 1.0;
@@ -581,7 +581,8 @@ class _ReaderPageState extends State<ReaderPage> {
         image: _provider(i),
         fit: BoxFit.fill, // the box already has the page's exact proportions
         gaplessPlayback: true,
-        filterQuality: FilterQuality.medium,
+        // High: bicubic resampling, the sharpest when a page is scaled to the screen.
+        filterQuality: FilterQuality.high,
         frameBuilder: (context, child, frame, sync) => sync || frame != null
             ? child
             : Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: context.pal.text3))),

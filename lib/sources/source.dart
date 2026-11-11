@@ -1,6 +1,8 @@
 // Source model, after Tachiyomi's CatalogueSource: popular, search with filters,
 // details, chapter list and page list. Each site implements this contract in Dart.
 
+import 'dart:math';
+
 enum MangaStatus { unknown, ongoing, completed, hiatus, cancelled }
 
 class SourceManga {
@@ -127,15 +129,60 @@ double? parseChapterNumber(String text) {
   return double.tryParse(m.last.group(1)!.replaceAll(',', '.'));
 }
 
-/// Title similarity in [0, 1] — token overlap with a bonus for exact matches.
-double titleSimilarity(String a, String b) {
-  String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9À-ɏ぀-ヿ一-鿿]+'), ' ').trim();
-  final na = norm(a), nb = norm(b);
+String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9À-ɏ぀-ヿ一-鿿]+'), ' ').trim();
+
+/// Words sites add to a title for a given release, not part of the name itself.
+final _editionWords = RegExp(
+  r'\b(edition|édition|deluxe|perfect|ultimate|kanzenban|couleurs?|colou?r(ed)?|full color|integrale|intégrale|'
+  r'remaster(ed)?|originale?|nouvelle|new|vf|vostfr|fr|raw|part|partie|tome|volume|vol)\b',
+);
+
+/// A title stripped of brackets, edition markers and part numbers: "Monster – Edition Deluxe"
+/// and "JoJo's Bizarre Adventure: Part 7–Steel Ball Run" compare by their core name.
+String coreTitle(String s) => _norm(
+      s
+          .toLowerCase()
+          .replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), ' ')
+          .replaceAll(_editionWords, ' ')
+          .replaceAll(RegExp(r'\b\d+\b'), ' '),
+    ).replaceAll(RegExp(r'\s+'), ' ');
+
+double _overlap(String na, String nb) {
   if (na.isEmpty || nb.isEmpty) return 0;
   if (na == nb) return 1;
   final ta = na.split(' ').toSet(), tb = nb.split(' ').toSet();
-  final inter = ta.intersection(tb).length;
-  final jaccard = inter / ta.union(tb).length;
+  final jaccard = ta.intersection(tb).length / ta.union(tb).length;
   final contains = (na.contains(nb) || nb.contains(na)) ? 0.15 : 0;
   return (jaccard + contains).clamp(0, 0.99);
+}
+
+/// Title similarity in [0, 1] — token overlap with a bonus for exact matches, on the raw
+/// titles and on their core names (whichever is closer).
+double titleSimilarity(String a, String b) => max(_overlap(_norm(a), _norm(b)), _overlap(coreTitle(a), coreTitle(b)));
+
+/// What to type in a source's search box to find a manga known by [titles]: the titles as
+/// they are, then their core names and the part after a colon or dash (sites often file
+/// "JoJo no Kimyou na Bouken: Steel Ball Run" as just "… Steel Ball Run"). At most [limit].
+List<String> titleQueries(List<String> titles, {int limit = 5}) {
+  final out = <String>{};
+  void add(String s) {
+    final t = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (t.length >= 2) out.add(t);
+  }
+
+  for (final t in titles.take(2)) {
+    add(t);
+  }
+  for (final t in titles) {
+    final plain = t.replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), ' ');
+    add(plain);
+    final parts = plain.split(RegExp(r'\s*[:：–—]\s*|\s+-\s+'));
+    if (parts.length > 1) {
+      for (final p in parts.reversed) {
+        final cleaned = p.replaceAll(RegExp(r'\bpart\s*\d+\b', caseSensitive: false), ' ');
+        if (cleaned.trim().split(' ').length >= 2 || cleaned.trim().length >= 6) add(cleaned);
+      }
+    }
+  }
+  return out.take(limit).toList();
 }

@@ -11,8 +11,10 @@ import '../core/theme.dart';
 import '../sources/catalog.dart';
 import '../sources/mangadex.dart';
 import '../sources/source.dart';
+import '../sources/web_sites.dart';
 import 'ink.dart';
 import 'reader_page.dart';
+import 'web_reader_page.dart';
 import 'shell.dart';
 import 'widgets.dart';
 
@@ -245,8 +247,14 @@ class _MangaPageState extends State<MangaPage> {
     SourceManga? best;
     var bestScore = 0.0;
     var bestGap = 1 << 20;
-    for (final title in titles.take(3)) {
-      final page = await source.search(title, 1, const {});
+    for (final title in titleQueries(titles)) {
+      final List<SourceManga> items;
+      try {
+        items = (await source.search(title, 1, const {})).items;
+      } catch (_) {
+        continue; // one failing query shouldn't hide the manga
+      }
+      final page = (items: items);
       for (final m in page.items) {
         candidates[m.url] = m;
         if (aniId != null && m.anilistId != null) {
@@ -684,6 +692,34 @@ class _MangaPageState extends State<MangaPage> {
             ),
           ),
         ]),
+      // Sites the app can't read by itself: shown inside the app, on this manga's search.
+      const SizedBox(height: 14),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Text((context.isEn ? 'On the web' : 'Sur le web').toUpperCase(), style: Txt.tag(context).copyWith(fontSize: 11, letterSpacing: 1.5)),
+          const SizedBox(width: 10),
+          const Expanded(child: SizedBox(height: 2, child: ColoredBox(color: Color(0x33121010)))),
+        ]),
+      ),
+      Wrap(spacing: 10, runSpacing: 10, children: [
+        for (final site in webSites)
+          Pressable(
+            onTap: () => WebReaderPage.open(context, title: site.name, url: site.searchUri(_ani?.english ?? _title)),
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(border: Border.all(color: inkBlack, width: 2), color: const Color(0xFFFBF8F1)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(site.name, style: Txt.label(context)),
+                const SizedBox(width: 6),
+                Text(site.lang.toUpperCase(), style: Txt.caption(context)),
+                const SizedBox(width: 6),
+                const Icon(Icons.menu_book_rounded, size: 15, color: inkBlack),
+              ]),
+            ),
+          ),
+      ]),
     ]);
   }
 

@@ -119,7 +119,8 @@ class _Shelves extends StatelessWidget {
                 // Shelf after shelf, book after book (45 ms apart), each landing with a little tilt.
                 delay: Duration(milliseconds: 260 + s * 180 + k * 45),
                 tilt: (i.isEven ? -1 : 1) * (2.0 + (i * 7 % 3)),
-                child: _Book(row: rows[i], look: look(i)),
+                // Underlines in reading order, quick (50 ms apart, 160 ms each) once the books have landed.
+                child: _Book(row: rows[i], look: look(i), underlineDelay: Duration(milliseconds: 620 + 50 * i)),
               ),
           ]),
         ),
@@ -193,6 +194,19 @@ class BookArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (category == 'jump') {
+      // Shōnen Jump: its shout in comic lettering, ink outline over the book colour.
+      return SizedBox(
+        width: 120 * scale,
+        height: 96 * scale,
+        child: Center(
+          child: Transform.rotate(
+            angle: -8 * pi / 180,
+            child: Text('JUMP!', style: GoogleFonts.bangers(fontSize: 46 * scale, color: ink, letterSpacing: 1, height: 1)),
+          ),
+        ),
+      );
+    }
     final trio = bookTrios[category];
     final parts = trio ?? bookSymbols[category] ?? bookSymbols['forYou']!;
     final box = trio != null ? const Size(200, 150) : const Size(100, 100);
@@ -220,12 +234,53 @@ class _BookArtPainter extends CustomPainter {
   bool shouldRepaint(_BookArtPainter old) => old.parts != parts || old.ink != ink || old.paper != paper;
 }
 
+/// Brush-lettered title: the stroke under it sweeps in left to right, then two drops pop
+/// at its end. Clip and scale only.
+class _InkTitle extends StatelessWidget {
+  const _InkTitle({required this.text, required this.ink, required this.drop, required this.delay});
+  final String text;
+  final Color ink, drop;
+  final Duration delay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(text, softWrap: false, textAlign: TextAlign.center, style: GoogleFonts.notoSerifJp(fontSize: 20, fontWeight: FontWeight.w800, color: ink, height: 1.05)),
+      ),
+      const SizedBox(height: 3),
+      SizedBox(
+        width: 104,
+        height: 14,
+        child: Stack(clipBehavior: Clip.none, children: [
+          Positioned.fill(
+            child: PaintReveal(
+              delay: delay,
+              duration: const Duration(milliseconds: 160),
+              curve: const Cubic(0.9, 0, 0.3, 1),
+              child: BrushShape(Brush.underline, color: ink),
+            ),
+          ),
+          Positioned.fill(
+            child: InkDots(
+              delay: delay + const Duration(milliseconds: 130),
+              dots: [(1.04, 0.35, 3, drop == inkRed), (0.92, 1.05, 2, drop == inkRed)],
+            ),
+          ),
+        ]),
+      ),
+    ]);
+  }
+}
+
 /// A category book. Hover lifts it; a tap pulls it off the shelf (up and tilted) before
 /// the ink bursts into the book.
 class _Book extends StatefulWidget {
-  const _Book({required this.row, required this.look});
+  const _Book({required this.row, required this.look, required this.underlineDelay});
   final RecoRow row;
   final (Color, Color, Color) look;
+  final Duration underlineDelay;
 
   @override
   State<_Book> createState() => _BookState();
@@ -281,19 +336,16 @@ class _BookState extends State<_Book> with SingleTickerProviderStateMixin {
             ),
             child: Stack(children: [
               Positioned(left: 0, top: 0, bottom: 0, width: 12, child: ColoredBox(color: spine)),
+              // The category name, centred and slightly tilted, underlined by a brush stroke
+              // that draws itself (shelf after shelf, book after book) with two ink drops.
               Positioned(
-                left: 22,
-                right: 10,
-                top: 12,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(context.isEn ? row.labelEn : row.labelFr, softWrap: false, style: GoogleFonts.notoSerifJp(fontSize: 21, fontWeight: FontWeight.w800, color: fg, height: 1.05)),
-                  ),
-                  const SizedBox(height: 3),
-                  Text('${row.items.length} ${context.isEn ? 'titles' : 'titres'}', style: Txt.caption(context).copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: fg.withValues(alpha: 0.75))),
-                ]),
+                left: 16,
+                right: 6,
+                top: 14,
+                child: Transform.rotate(
+                  angle: -4 * pi / 180,
+                  child: _InkTitle(text: context.isEn ? row.labelEn : row.labelFr, ink: fg, drop: spine == inkRed ? inkRed : (bg == inkRed ? inkBlack : inkRed), delay: widget.underlineDelay),
+                ),
               ),
               Positioned(left: trio ? 10 : 30, bottom: trio ? -2 : 18, child: BookArt(category: row.key, ink: fg, paper: bg)),
             ]),

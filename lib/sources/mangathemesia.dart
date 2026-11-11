@@ -85,9 +85,8 @@ class MangaThemesia extends MangaSource {
       'order=${filters['order'] as String? ?? (query.trim().isEmpty ? 'popular' : '')}',
       for (final g in (filters['genre'] as Set<String>? ?? const {})) 'genre%5B%5D=$g',
     ];
-    if (query.trim().isNotEmpty && filters.isEmpty) {
-      return _list('$baseUrl/page/$page/?s=${Uri.encodeQueryComponent(query.trim())}');
-    }
+    // The catalogue's title filter returns every match on one page (the site's ?s= search
+    // pages them 10 at a time, so a plain "Monster" was on page 2 and never found).
     return _list('$baseUrl$catalogPath/?${params.join('&')}');
   }
 

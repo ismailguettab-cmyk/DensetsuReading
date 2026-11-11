@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/activity.dart';
 import 'anilist.dart';
 import 'session.dart';
+import 'shonen_jump.dart';
 
 class RecoCategory {
   const RecoCategory(this.key, this.fr, this.en, {this.genre, this.tag});
@@ -224,7 +225,9 @@ class Recommender extends ChangeNotifier {
       // Push the current picks back too, so the reload really shows other titles.
       final current = rows[index].items.map((m) => m.id).toSet();
       final RecoRow fresh;
-      if (key == 'forYou') {
+      if (key == 'jump') {
+        fresh = RecoRow(key, jumpLabel.$1, jumpLabel.$2, _pick(await _jumpPool(), profile, profile, const <int, double>{}, current, perRow));
+      } else if (key == 'forYou') {
         final pools = await _pools(recoCategories.toList()..shuffle(_rng), profile, limit: 4);
         final collab = await _collab();
         final everything = {for (final p in pools.values) for (final m in p) m.id: m, ...collab.media}.values.toList();
@@ -413,11 +416,31 @@ class Recommender extends ChangeNotifier {
     return picked;
   }
 
+  /// Weekly Shōnen Jump, 1968 to today: 100 series drawn at random among those not on the
+  /// user's list, fetched in one request.
+  Future<List<AniMedia>> _jumpPool() async {
+    final onList = _session.listIds;
+    final ids = shonenJumpIds.where((id) => !onList.contains(id)).toList()..shuffle(_rng);
+    if (ids.isEmpty) return const [];
+    final a = ids.take(50).toList(), b = ids.skip(50).take(50).toList();
+    final data = await _session.api.query(
+      'query { a: Page(perPage: 50) { media(id_in: ${jsonEncode(a)}, isAdult: false) { ...M } } '
+      'b: Page(perPage: 50) { media(id_in: ${jsonEncode(b.isEmpty ? a : b)}, isAdult: false) { ...M } } } $mediaFragment',
+    );
+    return [
+      for (final alias in ['a', 'b'])
+        ...((data[alias]?['media'] as List?) ?? const []).map((m) => AniMedia.fromJson(m as Map<String, dynamic>)),
+    ];
+  }
+
+  static const jumpLabel = ('Shōnen Jump', 'Shōnen Jump');
+
   Future<List<RecoRow>> _compute() async {
     final profile = buildProfile();
-    final results = await Future.wait([_pools(recoCategories, profile), _collab()]);
+    final results = await Future.wait([_pools(recoCategories, profile), _collab(), _jumpPool().catchError((Object _) => <AniMedia>[])]);
     final pools = results[0] as Map<String, List<AniMedia>>;
     final collab = results[1] as ({Map<int, double> scores, Map<int, AniMedia> media});
+    final jump = results[2] as List<AniMedia>;
 
     final taken = <int>{};
     final rows = <RecoRow>[];
@@ -425,6 +448,9 @@ class Recommender extends ChangeNotifier {
     final forYou = _pick(everything, profile, profile, collab.scores, taken, perRow);
     taken.addAll(forYou.map((m) => m.id));
     if (forYou.isNotEmpty) rows.add(RecoRow('forYou', 'Taillés pour toi', 'Made for you', forYou));
+    // The Jump catalogue keeps its own picks (a series may also appear in a genre shelf).
+    final jumpPicks = _pick(jump, profile, profile, collab.scores, const <int>{}, perRow);
+    if (jumpPicks.length >= 6) rows.add(RecoRow('jump', jumpLabel.$1, jumpLabel.$2, jumpPicks));
 
     // Categories the user reads most come first.
     double categoryWeight(RecoCategory c) => c.genre != null ? (profile.genres[c.genre] ?? 0) : (profile.tags[c.tag] ?? 0) * 1.4;
